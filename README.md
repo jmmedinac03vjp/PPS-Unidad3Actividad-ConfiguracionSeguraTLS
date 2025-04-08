@@ -1,7 +1,6 @@
 # PPS-Unidad3Actividad-ConfiguracionSeguraTLSCifradoDatosAES
 Actividad de configuración segura de TLS y Cifrado de datos con AES
-# PPS-Unidad3Actividad7-RCE
-Explotación y Mitigación de ().
+
 Tenemos como objetivo:
 
 > - Ver cómo se pueden hacer ataques .
@@ -19,9 +18,9 @@ Consecuencias de :
 ---
 > Lee detenidamente la sección de vulnerabilidades de subida de archivos.  de la página de PortWigger <https://portswigger.net/web-security/file-upload>
 >
-> Lee el siguiente [documento sobre Explotación y Mitigación de ataques de Remote Code Execution](./files/ExplotacionYMitigacion.pdf>
+> Lee el siguiente [documento sobre Configuración Segura de TLS y Cifrado de Datos Sensibles con AES](./files/ConfiguracionTLSCifradoDatosAES.pdf)
 > 
-> También y como marco de referencia, tienes [ la sección de correspondiente de ataque  del **Proyecto Web Security Testing Guide** (WSTG) del proyecto **OWASP**.]()
+> También y como marco de referencia, tienes [ la sección de correspondiente de pruebas de la capa de transporte Débil  del **Proyecto Web Security Testing Guide** (WSTG) del proyecto **OWASP**.](https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/09-Testing_for_Weak_Cryptography/01-Testing_for_Weak_Transport_Layer_Security)
 >
 
 
