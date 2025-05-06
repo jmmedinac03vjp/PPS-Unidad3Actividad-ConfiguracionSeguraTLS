@@ -7,7 +7,7 @@ Tenemos como objetivo:
 >
 > - Aplicar cambios para prevenir ataques de configuración insegura.
 
-## 1. ¿Qué es TLS?
+# ¿Qué es TLS?
 ---
 
 **TLS (Transport Layer Security)** es un protocolo criptográfico que proporciona comunicaciones seguras sobre redes de computadoras, especialmente en internet. Su objetivo principal es proteger la confidencialidad e integridad de los datos transmitidos entre aplicaciones, como navegadores web y servidores.
@@ -30,7 +30,7 @@ TLS es el sucesor de **SSL (Secure Sockets Layer)**. Aunque SSL fue ampliamente 
 
 Vamos realizando operaciones:
 
-# Iniciar entorno de pruebas
+## Iniciar entorno de pruebas
 
 Situáte en la carpeta de del entorno de pruebas de nuestro servidor LAMP e inicia el escenario multicontendor:
 
@@ -44,12 +44,12 @@ Para acceder a nuestro servidor apache:
 docker exec -it lamp-php83 /bin/bash
 ~~~
 
-# Cómo habilitar HTTPS con SSL/TLS en Servidor Apache
+## Habilitar HTTPS con SSL/TLS en Servidor Apache
 ---
 
 Para proteger nuestro servidor es crucial habilitar HTTPS en el servidor local. Veamos cómo podemos habilitarlo en Apache con dos métodos diferentes.
 
-## Obtención del certíficado
+### Obtención del certíficado
 
 Para utilizar protocolos SSL tenemos que tener un certificado que indique quienes sómos. Podemos hacerlo de dos formas:
 
@@ -57,7 +57,7 @@ Para utilizar protocolos SSL tenemos que tener un certificado que indique quiene
 
 - Obtener un certificado de un entidad certificadora.
 
-## Método 1: Obtener certificado con **OpenSSL**
+#### Método 1: Obtener certificado con **OpenSSL**
 
 1. Generamos un certificado SSL autofirmado
 
@@ -99,12 +99,13 @@ Vemos como se han creado:
 - Una **clave privada** `localhost.key` que usará el servidor web.
 - Un **certificado autofirmado** `localhost.crt`válido por un año asociado a localhost.
 
+Listar directorio `/etc/apache2/ssl`
 ![](images/hard8.png)
 
 Este certificado SSL se puede usar para habilitar **HTTPS en Apache** para un entorno local o de pruebas. No está firmado por una entidad certificadora reconocida, por lo que los navegadores lo marcarán como 
 "_no seguro_" pero es útil para el desarrollo.
 
-## Método 2: Obtener Certificado en un servidor Linux usando Let's Encrypt y Certbot**
+#### Método 2: Obtener Certificado en un servidor Linux usando Let's Encrypt y Certbot
 ---
 
 El objetivo de [Let’s Encrypt[(https://letsencrypt.org/es/how-it-works/) y el protocolo ACME es hacer posible configurar un servidor HTTPS y permitir que este genere automáticamente un certificado válido para navegadores, sin ninguna intervención humana. Esto se logra ejecutando un agente de administración de certificados en el servidor web.
@@ -119,7 +120,7 @@ Antes de empezar, debemos asegurarnos que:
 
 - Tenemos un nombre de dominio registrado apuntando a la IP pública del servidor.
 
-Hasta ahora hemos hecho todos los ejercicios en nuestro servidor local `localhost`. Si queremos obtener un certificado en Let`s Encrypt debemos de tener un dominio registrado.
+Hasta ahora hemos hecho todos los ejercicios en nuestro servidor local `localhost`. Si queremos obtener un certificado en Let`s Encrypt debemos de tener un dominio registrado o bien nuestro servidor en un sitio de hosting.
 
 Podemos obtener un dominio gratuito en webs como `duckdns.org` o `no-ip.org`. Vamos a crear uno
 
@@ -161,7 +162,13 @@ apt install certbot python3-certbot-apache
 ~~~
 
 
-**🔑 Paso 3: Obtener el certificado SSL**
+**🌐 Paso 3: Publicar nuestro servidor web.**
+
+Crear un servidor en un sitio de hosting o bien si estamos usando nuestr servidor local, deberemos de abrir los puertos de nuestro router para que sea accesible desde el exterior.
+
+Si no es accesible desde el exterior el siguiente paso nos dará un error.
+
+**🔑 Paso 4: Obtener el certificado SSL**
 
 ~~~
 certbot --apache
@@ -180,14 +187,15 @@ Durante el proceso:
 
 - Se te preguntará si deseas redirigir automáticamente de HTTP a HTTPS (recomendado).
 
-**🌐 Paso 4: Verificar HTTPS**
+
+**🌐 Paso 5: Verificar HTTPS**
 
 Accede a tu sitio en el navegador usando: `https://tudominio.com`
 
 Deberías ver el candado que indica que la conexión es segura.
 
 
-**🔄 Paso 5: Renovación automática del certificado**
+**🔄 Paso 6: Renovación automática del certificado**
 
 Let's Encrypt emite certificados válidos por 90 días. Certbot configura automáticamente la renovación.
 
@@ -198,7 +206,7 @@ sudo certbot renew --dry-run
 ~~~
 
 
-## Configurar Apache para usar HTTPS**
+### Configurar Apache para usar HTTPS
 ---
 
 Una vez que tengas el certificado y la clave privada, debes configurar Apache para utilizarlos.
@@ -228,7 +236,7 @@ Lo modificamos y dejamos así:
 <VirtualHost *:443>
     ServerName www.pps.edu
 
-   //activar uso del motor de protocolo SSL
+    # activar uso del motor de protocolo SSL
     SSLEngine on
     SSLCertificateFile /etc/apache2/ssl/localhost.crt
     SSLCertificateKeyFile /etc/apache2/ssl/localhost.key
@@ -239,26 +247,148 @@ Lo modificamos y dejamos así:
 
 Date cuenta que hemos creado un **servidor virtual** con nombre **www.pps.edu**. A partir de ahora tendremos que introducir en la barra de dirección del navegador `https://www.pps.edu` en vez de `https://localhost`.
 
-## Paso3: Habilitar SSL y el sitio:
+### Habilitar SSL y el sitio:
 ---
 
 En el servidor Apache, activamos **SSL** mediante la habilitación de la configuración `default-ssl.conf`que hemos creado:
 
-~~~
+Fíjate que  tenemos todavía habilitado la configuración del sitio por defecto `000-default.conf`, y que en la configuración `default-ssl`estamos configurando tanto el puerto `http` **Puerto 80** como el puerto de `https`**Puerto 443**.
+
+Por lo tanto deberíamos deshabilitar la configuración por defecto:
+
+```apache
+a2dissite 000-default.conf
+```
+
+Para habilitar ssl y la configuración de ssl realizamos:
+
+```bash 
 a2enmod ssl
 a2ensite default-ssl.conf
 service apache2 reload
+```
+
+
+### Resolución local de nombres: dns o fichero **/etc/hosts**
+
+Nuestro navegador resuleve la dirección www.google.com o cualquier otra asociándole la ip donde se encuentra en el servidor, eso es debido a la resolución de servidores dns.
+
+En el caso de nuestros sitios virtuales, si no están incluidos en los servidores dns, para hacer pruebas en nuestro ordenador, hemos de modificar las rutas en nuestro equipo para que pueda asociar estos nombres (ficticios) con la ip loc>
+
+Debemos editar el fichero hosts para que nos devuelva la dirección del bucle local (127.0.0.1) cuando el navegador pida la url www.pps.net o cualquier otra asociada con un host virtual.
+
+Este fichero está en /etc/hosts.
+
+archivo `/etc/hosts`
+``` 
+127.0.0.1       pps.edu www.pps.edu
+```
+
+En los casos asociamos los nombres de los host virtuales a localhost tal y como se muestra en la imagen.
+
+![](images/hard3.png)
+
+Además en el archivo `/etc/hosts` vemos cómo dirección de nuestro servidor apache. En nuestro caso `172.20.0.5`
+
+No obstante puedes consultarlo en docker con el comando:
+
+~~~
+docker inspect lamp-php83 |grep IPAddress
 ~~~
 
+Si queremos acceder a este servidor virtual desde otros equipos de la red, o si estamos utilizando docker y queremos acceder a ellos desde nuestro navegador, tenemos que añadir en el /etc/hosts una linea que vincule la dirección ip con >
 
-## Paso 4: poner dirección en /etc/hosts o habilitar puerto 443
-
-Añadimos nuestro dominio en el archivo /etc/hosts de nuestra máquina anfitriona para que resulva bien los dns. [Lo tienes explicado en una sección anterior(## Resolución_de_ nombres:_dns_o_fichero_**/etc/hosts**)
+![](images/hard4.png)
 
 Ahora el servidor soportaría **HTTPS**. Accedemos al servidor en la siguiente dirección: `https://www.pps.edu`
 
+![](images/TLS15.png)
 
-## 🔒 Forzar HTTPS en Apache2 (default.conf y .htaccess)
+Nos dá un aviso de que es un servidor inseguro, por lo que pulsamos `avanzado`y `Acceder a sitio inseguro`.
+
+![](images/TLS16.png)
+
+## Verificar la configuración con SSL Labs (con dominio)
+
+Para asegurarse de que la configuración de TLS es segura, se puede comprobar el dominio en: SSL Labs Test. El servidor tiene que ser accesible desde internet. No funcionará en modo local si no abrimos los puertos de nuestro router.
+
+<https://www.ssllabs.com/ssltest/>
+
+![](images/TLS17.png)
+
+Además podemos obtener información extensa sobre el certificado y `SSL`.
+
+![](images/TLS18.png)
+
+## ¿Cómo eliminar la advertencia del candado? (Opcional)
+
+Si solo trabajas en local, no hay problema en ignorar la advertencia. Pero si se quiere que el navegador lo reconozca como seguro sin advertencias, dado que Firefox solo permite importar certificados de CA en la pestaña "Authorities", se debe generar un certificado raíz de CA y luego firmar el certificado con él.
+
+1. Crear un Certificado de Autoridad (CA)
+
+- Ejecutar estos comandos para generar una CA local:
+``` bash
+mkdir -p /etc/apache2/ssl
+cd /etc/apache2/ssl
+```
+
+- Generar la clave privada de la CA
+``` bash
+openssl genrsa -out myCA.key 2048
+```
+- Generar el certificado raíz de la CA (válido por 10 años)
+``` bash
+openssl req -x509 -new -nodes -key localhost.key -sha256 -days 3650 -out MyCA.pem -subj "/C=ES/ST=Extremadura/L=Plasencia/O=MyCompany/OU=MiDepartmen/CN=MiEntidadCA"
+```
+
+2. Firmar el Certificado SSL con la CA Local
+
+- Podemos enerar una clave para el servidor Apache:
+
+``` bash
+openssl genrsa -out localhost.key 2048
+```
+Aunque ya la tenemos creada anteriormente con nombre localhost.key
+
+-Crear una solicitud de firma (CSR Certificate Signing Request, es un archivo que contiene información sobre una entidad que solicita un certificado SSL/TLS):
+``` bash
+openssl req -new -key localhost.key -out server.csr -subj "/C=ES/ST=Extremadura/L=Plasencia/O=MyCompany/OU=MiDepartamento/CN=localhost"
+```
+
+- Firmar el certificado con nuestra CA local:
+``` bash
+openssl x509 -req -in server.csr -CA myCA.pem -CAkey myCA.key -CAcreateserial -out server.crt -days 365 -sha256
+```
+Ahora disponemos de un certificado server.crt firmado por nuestra CA myCA.pem.
+
+3. Configurar Apache con el Nuevo Certificado
+Asegurar de que Apache use los nuevos certificados. Para ello modificar:
+sudo mousepad /etc/apache2/sites-available/default-ssl.conf
+Cambiar las rutas para que apunten a:
+SSLEngine on
+SSLCertificateFile /etc/apache2/ssl/server.crt
+SSLCertificateKeyFile /etc/apache2/ssl/server.key
+SSLCertificateChainFile /etc/apache2/ssl/myCA.pem
+Guardar y reiniciar Apache:
+sudo systemctl restart apache2
+4. Importar la CA en Firefox
+Importar myCA.pem en la pestaña "Authorities" de Firefox:
+1.
+ Abrir Firefox e ir a about:preferences#privacy
+2.
+ En Certificados y seleccionar Ver certificados
+3.
+ En la pestaña Autoridades y seleccionar Importar...
+4.
+ Seleccionar /etc/apache2/ssl/myCA.pem
+5.
+ Marcar la casilla "Confiar en esta CA para identificar sitios web"
+6.
+ Guardar los cambios.
+Firefox confiará en los certificados firmados por esta CA, y la advertencia desaparecerá.
+
+
+### 🔒 Forzar HTTPS en Apache2 (default.conf y .htaccess)
 
 ### 1. Configuración en `default.conf` (archivo de configuración de Apache)
 
