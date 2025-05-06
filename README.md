@@ -1,13 +1,11 @@
-# PPS-Unidad3Actividad-ConfiguracionSeguraTLSCifradoDatosAES
+# PPS-Unidad3Actividad-ConfiguracionSeguraTLS
 Actividad de configuración segura de TLS
 
 Tenemos como objetivo:
 
-> - Ver cómo se pueden hacer ataques .
+> - Conocer el funcionamiento de protocolos de transimisión seguros SSL/TLS y como activarlos.
 >
-> - Analizar el código de la aplicación que permite ataques de .
->
-> - Implementar diferentes modificaciones del codigo para aplicar mitigaciones o soluciones.
+> - Aplicar cambios para prevenir ataques de configuración insegura.
 
 ## 1. ¿Qué es TLS?
 ---
@@ -22,11 +20,7 @@ TLS es el sucesor de **SSL (Secure Sockets Layer)**. Aunque SSL fue ampliamente 
 - **Integridad:** mediante funciones hash que detectan alteraciones.
 - **Autenticación:** utilizando certificados digitales que identifican a las partes.
 
----
-
-Consecuencias de :
-- 
-## ACTIVIDADES A REALIZAR
+# ACTIVIDADES A REALIZAR
 ---
 > Lee el siguiente [documento sobre Configuración Segura de TLS y Cifrado de Datos Sensibles con AES](./files/ConfiguracionTLSCifradoDatosAES.pdf)
 > 
@@ -36,7 +30,7 @@ Consecuencias de :
 
 Vamos realizando operaciones:
 
-### Iniciar entorno de pruebas
+# Iniciar entorno de pruebas
 
 Situáte en la carpeta de del entorno de pruebas de nuestro servidor LAMP e inicia el escenario multicontendor:
 
@@ -50,13 +44,20 @@ Para acceder a nuestro servidor apache:
 docker exec -it lamp-php83 /bin/bash
 ~~~
 
-## Cómo habilitar HTTPS con SSL/TLS en Servidor Apache
+# Cómo habilitar HTTPS con SSL/TLS en Servidor Apache
 ---
 
 Para proteger nuestro servidor es crucial habilitar HTTPS en el servidor local. Veamos cómo podemos habilitarlo en Apache con dos métodos diferentes.
 
+## Obtención del certíficado
 
-### Método 1: Habilitar HTTPS en Apache con **OpenSSL**
+Para utilizar protocolos SSL tenemos que tener un certificado que indique quienes sómos. Podemos hacerlo de dos formas:
+
+- Obtener un certificado autofirmado que nos sirva para un entorno local o de pruebas. 
+
+- Obtener un certificado de un entidad certificadora.
+
+## Método 1: Obtener certificado con **OpenSSL**
 
 1. Generamos un certificado SSL autofirmado
 
@@ -94,71 +95,16 @@ Durante la ejecución del comando, se te solicitará que completes datos como pa
 
 ![](images/hard7.png)
 
-Vemos como se han creado el certificado y la clave pública
+Vemos como se han creado:
+- Una **clave privada** `localhost.key` que usará el servidor web.
+- Un **certificado autofirmado** `localhost.crt`válido por un año asociado a localhost.
 
 ![](images/hard8.png)
 
-**Paso 2.Configurar Apache para usar HTTPS**
----
+Este certificado SSL se puede usar para habilitar **HTTPS en Apache** para un entorno local o de pruebas. No está firmado por una entidad certificadora reconocida, por lo que los navegadores lo marcarán como 
+"_no seguro_" pero es útil para el desarrollo.
 
-Una vez que tengas el certificado y la clave privada, debes configurar Apache para utilizarlos.
-
-
-Editar el archivo de configuración de Apache `default-ssl.conf`:
-
-~~~
-nano /etc/apache2/sites-available/default-ssl.conf
-~~~
-
-Lo modificamos y dejamos así:
-
-~~~
-<VirtualHost *:80>
-
-    ServerName www.pps.edu
-
-    ServerAdmin webmaster@localhost
-    DocumentRoot /var/www/html
-
-    ErrorLog ${APACHE_LOG_DIR}/error.log
-    CustomLog ${APACHE_LOG_DIR}/access.log combined
-
-</VirtualHost>
-
-<VirtualHost *:443>
-    ServerName www.pps.edu
-
-   //activar uso del motor de protocolo SSL
-    SSLEngine on
-    SSLCertificateFile /etc/apache2/ssl/localhost.crt
-    SSLCertificateKeyFile /etc/apache2/ssl/localhost.key
-
-    DocumentRoot /var/www/html
-</VirtualHost>
-~~~
-
-Date cuenta que hemos creado un **servidor virtual** con nombre **www.pps.edu**. A partir de ahora tendremos que introducir en la barra de dirección del navegador `https://www.pps.edu` en vez de `https://localhost`.
-
-**Paso3: Habilitar SSL y el sitio:**
----
-
-En el servidor Apache, activamos **SSL** mediante la habilitación de la configuración `default-ssl.conf`que hemos creado:
-
-~~~
-a2enmod ssl
-a2ensite default-ssl.conf
-service apache2 reload
-~~~
-
-
-**Paso 4: poner dirección en /etc/hosts o habilitar puerto 443**
-
-Añadimos nuestro dominio en el archivo /etc/hosts de nuestra máquina anfitriona para que resulva bien los dns. [Lo tienes explicado en una sección anterior(## Resolución_de_ nombres:_dns_o_fichero_**/etc/hosts**)
-
-Ahora el servidor soportaría **HTTPS**. Accedemos al servidor en la siguiente dirección: `https://www.pps.edu`
-
-
-### Método 2: Obtener Certificado en un servidor Linux usando Let's Encrypt y Certbot**
+## Método 2: Obtener Certificado en un servidor Linux usando Let's Encrypt y Certbot**
 ---
 
 El objetivo de [Let’s Encrypt[(https://letsencrypt.org/es/how-it-works/) y el protocolo ACME es hacer posible configurar un servidor HTTPS y permitir que este genere automáticamente un certificado válido para navegadores, sin ninguna intervención humana. Esto se logra ejecutando un agente de administración de certificados en el servidor web.
@@ -234,7 +180,6 @@ Durante el proceso:
 
 - Se te preguntará si deseas redirigir automáticamente de HTTP a HTTPS (recomendado).
 
-
 **🌐 Paso 4: Verificar HTTPS**
 
 Accede a tu sitio en el navegador usando: `https://tudominio.com`
@@ -253,19 +198,65 @@ sudo certbot renew --dry-run
 ~~~
 
 
-**🛠 Paso 6: Revisar configuración SSL (opcional)**
+## Configurar Apache para usar HTTPS**
+---
 
-Los archivos se encuentran en:
+Una vez que tengas el certificado y la clave privada, debes configurar Apache para utilizarlos.
 
-/etc/apache2/sites-available/
 
-Fragmento típico de configuración SSL:
+Editar el archivo de configuración de Apache `default-ssl.conf`:
 
 ~~~
-SSLEngine on
-SSLCertificateFile /etc/letsencrypt/live/tu-dominio/fullchain.pem
-SSLCertificateKeyFile /etc/letsencrypt/live/tu-dominio/privkey.pem
+nano /etc/apache2/sites-available/default-ssl.conf
 ~~~
+
+Lo modificamos y dejamos así:
+
+~~~
+<VirtualHost *:80>
+
+    ServerName www.pps.edu
+
+    ServerAdmin webmaster@localhost
+    DocumentRoot /var/www/html
+
+    ErrorLog ${APACHE_LOG_DIR}/error.log
+    CustomLog ${APACHE_LOG_DIR}/access.log combined
+
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName www.pps.edu
+
+   //activar uso del motor de protocolo SSL
+    SSLEngine on
+    SSLCertificateFile /etc/apache2/ssl/localhost.crt
+    SSLCertificateKeyFile /etc/apache2/ssl/localhost.key
+
+    DocumentRoot /var/www/html
+</VirtualHost>
+~~~
+
+Date cuenta que hemos creado un **servidor virtual** con nombre **www.pps.edu**. A partir de ahora tendremos que introducir en la barra de dirección del navegador `https://www.pps.edu` en vez de `https://localhost`.
+
+## Paso3: Habilitar SSL y el sitio:
+---
+
+En el servidor Apache, activamos **SSL** mediante la habilitación de la configuración `default-ssl.conf`que hemos creado:
+
+~~~
+a2enmod ssl
+a2ensite default-ssl.conf
+service apache2 reload
+~~~
+
+
+## Paso 4: poner dirección en /etc/hosts o habilitar puerto 443
+
+Añadimos nuestro dominio en el archivo /etc/hosts de nuestra máquina anfitriona para que resulva bien los dns. [Lo tienes explicado en una sección anterior(## Resolución_de_ nombres:_dns_o_fichero_**/etc/hosts**)
+
+Ahora el servidor soportaría **HTTPS**. Accedemos al servidor en la siguiente dirección: `https://www.pps.edu`
+
 
 ## 🔒 Forzar HTTPS en Apache2 (default.conf y .htaccess)
 
