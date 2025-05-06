@@ -9,7 +9,19 @@ Tenemos como objetivo:
 >
 > - Implementar diferentes modificaciones del codigo para aplicar mitigaciones o soluciones.
 
-## ¿Qué es CSRF?
+## 1. ¿Qué es TLS?
+---
+
+**TLS (Transport Layer Security)** es un protocolo criptográfico que proporciona comunicaciones seguras sobre redes de computadoras, especialmente en internet. Su objetivo principal es proteger la confidencialidad e integridad de los datos transmitidos entre aplicaciones, como navegadores web y servidores.
+
+TLS es el sucesor de **SSL (Secure Sockets Layer)**. Aunque SSL fue ampliamente utilizado, sus versiones han quedado obsoletas debido a múltiples vulnerabilidades. Hoy en día, TLS en sus versiones 1.2 y 1.3 es el estándar de facto para la seguridad en la web.
+
+**TLS proporciona:**
+
+- **Confidencialidad:** gracias al cifrado de los datos en tránsito.
+- **Integridad:** mediante funciones hash que detectan alteraciones.
+- **Autenticación:** utilizando certificados digitales que identifican a las partes.
+
 ---
 
 Consecuencias de :
@@ -26,17 +38,330 @@ Vamos realizando operaciones:
 
 ### Iniciar entorno de pruebas
 
--Situáte en la carpeta de del entorno de pruebas de nuestro servidor LAMP e inicia el esce>
+Situáte en la carpeta de del entorno de pruebas de nuestro servidor LAMP e inicia el escenario multicontendor:
 
 ~~~
 docker-compose up -d
 ~~~
 
+Para acceder a nuestro servidor apache:
+
 ~~~
 docker exec -it lamp-php83 /bin/bash
 ~~~
 
+## Cómo habilitar HTTPS con SSL/TLS en Servidor Apache
+---
 
+Para proteger nuestro servidor es crucial habilitar HTTPS en el servidor local. Veamos cómo podemos habilitarlo en Apache con dos métodos diferentes.
+
+
+### Método 1: Habilitar HTTPS en Apache con **OpenSSL**
+
+1. Generamos un certificado SSL autofirmado
+
+Para entornos de prueba o desarrollo, se puede utilizar un **certificado autofirmado**, es decir, un certificado que no ha sido emitido por una entidad de certificación.
+
+
+**Paso 1: Crear la clave privada y el certificado**
+---
+
+Como estamos trabajando bajo docker, accedemos al servidor:
+
+~~~
+docker exec -it lamp-php83 /bin/bash
+~~~
+
+Comprobamos que están creados los directorios donde se guardan los certificados y creamos el certificado autofirmado:
+
+~~~
+mkdir /etc/apache2/ssl
+cd /etc/apache2/ssl
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout localhost.key -out localhost.crt
+~~~
+
+**Explicación de los parámetros del comando:**
+
+- `req`: inicia la generación de una solicitud de certificado.
+- `-x509`: crea un certificado autofirmado en lugar de una CSR.
+- `-nodes`: omite el cifrado de la clave privada, evitando el uso de contraseña.
+- `-newkey rsa:2048`: genera una nueva clave RSA de 2048 bits.
+- `-keyout server.key`: nombre del archivo que contendrá la clave privada.
+- `-out server.crt`: nombre del archivo de salida para el certificado.
+- `-days 365`: el certificado será válido por 365 días.
+
+Durante la ejecución del comando, se te solicitará que completes datos como país, nombre de organización, y nombre común (dominio).
+
+![](images/hard7.png)
+
+Vemos como se han creado el certificado y la clave pública
+
+![](images/hard8.png)
+
+**Paso 2.Configurar Apache para usar HTTPS**
+---
+
+Una vez que tengas el certificado y la clave privada, debes configurar Apache para utilizarlos.
+
+
+Editar el archivo de configuración de Apache `default-ssl.conf`:
+
+~~~
+nano /etc/apache2/sites-available/default-ssl.conf
+~~~
+
+Lo modificamos y dejamos así:
+
+~~~
+<VirtualHost *:80>
+
+    ServerName www.pps.edu
+
+    ServerAdmin webmaster@localhost
+    DocumentRoot /var/www/html
+
+    ErrorLog ${APACHE_LOG_DIR}/error.log
+    CustomLog ${APACHE_LOG_DIR}/access.log combined
+
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName www.pps.edu
+
+   //activar uso del motor de protocolo SSL
+    SSLEngine on
+    SSLCertificateFile /etc/apache2/ssl/localhost.crt
+    SSLCertificateKeyFile /etc/apache2/ssl/localhost.key
+
+    DocumentRoot /var/www/html
+</VirtualHost>
+~~~
+
+Date cuenta que hemos creado un **servidor virtual** con nombre **www.pps.edu**. A partir de ahora tendremos que introducir en la barra de dirección del navegador `https://www.pps.edu` en vez de `https://localhost`.
+
+**Paso3: Habilitar SSL y el sitio:**
+---
+
+En el servidor Apache, activamos **SSL** mediante la habilitación de la configuración `default-ssl.conf`que hemos creado:
+
+~~~
+a2enmod ssl
+a2ensite default-ssl.conf
+service apache2 reload
+~~~
+
+
+**Paso 4: poner dirección en /etc/hosts o habilitar puerto 443**
+
+Añadimos nuestro dominio en el archivo /etc/hosts de nuestra máquina anfitriona para que resulva bien los dns. [Lo tienes explicado en una sección anterior(## Resolución_de_ nombres:_dns_o_fichero_**/etc/hosts**)
+
+Ahora el servidor soportaría **HTTPS**. Accedemos al servidor en la siguiente dirección: `https://www.pps.edu`
+
+
+### Método 2: Obtener Certificado en un servidor Linux usando Let's Encrypt y Certbot**
+---
+
+El objetivo de [Let’s Encrypt[(https://letsencrypt.org/es/how-it-works/) y el protocolo ACME es hacer posible configurar un servidor HTTPS y permitir que este genere automáticamente un certificado válido para navegadores, sin ninguna intervención humana. Esto se logra ejecutando un agente de administración de certificados en el servidor web.
+
+✅ Requisitos previos
+
+Antes de empezar, debemos asegurarnos que:
+
+- Tenemos acceso SSH como usuario root o con privilegios de sudo.
+
+- El puerto 80 (HTTP) y 443 (HTTPS) están abiertos en el firewall.
+
+- Tenemos un nombre de dominio registrado apuntando a la IP pública del servidor.
+
+Hasta ahora hemos hecho todos los ejercicios en nuestro servidor local `localhost`. Si queremos obtener un certificado en Let`s Encrypt debemos de tener un dominio registrado.
+
+Podemos obtener un dominio gratuito en webs como `duckdns.org` o `no-ip.org`. Vamos a crear uno
+
+**📥 Paso 1: Registrar un dominio a nuestro nombre**.
+
+Normalmente es necesario adquirir un dominio para nuestra organización. Si embargo podemos obtener un dominio y asociarlo a una IP dinámica de forma gratuita.
+
+En esta ocasión he elegido [Duck DNS](https://www.duckdns.org/).
+
+- Iniciamos sesión con una cuenta de Gmail, github, etc.
+
+- Introducimos el nombre de dominio que queremos y comprobamos que está disponible. Lógicamente, nuestro nombre de dominio será un subdominio de Duck DNS. En mi caso he generado `ppsiesvalledeljerteplasencia.duckdns.org`. Además la asociará con la dirección ip que detecta en ese momento.
+
+
+![](images/hard11.png)
+
+- Ahora que tenemos un nombre de dominio registrado, debemos modificar el `ServerName` del fichero de configuración de nuestro host virtual `/etc/apache2/sites-available/default-ssl.conf` o el fichero de configuración del host virtual que deseemos.
+
+![](images/hard13.png)
+
+
+- Para poder acceder a ella tendremos que añadirla en nuestro ficherto /etc/hosts, y abrir posteriormente los puertos de nuestro router, pera ya lo veremos más adelante. Lógicamente, esto último no lo podemos hacer en nuestro centro, tendremos que limitarlo a hacerlo en su caso en nuestra casa.
+ `
+![](images/hard12.png)
+
+Podemos comprobar que funciona todo con el siguiente comando:
+
+~~~
+nslookup http://ppsiesvalledeljerteplasencia.duckdns.org/
+~~~
+
+Una vez registrado el dominio, procedemos con la obtención del certificado:
+
+**📥 Paso 2: Instalar Certbot**
+
+~~~
+apt update
+apt install certbot python3-certbot-apache
+~~~
+
+
+**🔑 Paso 3: Obtener el certificado SSL**
+
+~~~
+certbot --apache
+~~~
+Durante el proceso:
+
+- Se verificará que el dominio apunte correctamente al servidor.
+
+- Se te pedirá un correo electrónico.
+
+- Se te pedirá que aceptes la licencia.
+
+- Se te pedirá permiso de uso de tu correo para fines de la organización.
+
+- Si tienes creado los archivos de configuración de varios servidores, te pedirá que indiques para cuál o cuales de ellos lo quieres.
+
+- Se te preguntará si deseas redirigir automáticamente de HTTP a HTTPS (recomendado).
+
+
+**🌐 Paso 4: Verificar HTTPS**
+
+Accede a tu sitio en el navegador usando: `https://tudominio.com`
+
+Deberías ver el candado que indica que la conexión es segura.
+
+
+**🔄 Paso 5: Renovación automática del certificado**
+
+Let's Encrypt emite certificados válidos por 90 días. Certbot configura automáticamente la renovación.
+
+Puedes probarla con:
+
+~~~
+sudo certbot renew --dry-run
+~~~
+
+
+**🛠 Paso 6: Revisar configuración SSL (opcional)**
+
+Los archivos se encuentran en:
+
+/etc/apache2/sites-available/
+
+Fragmento típico de configuración SSL:
+
+~~~
+SSLEngine on
+SSLCertificateFile /etc/letsencrypt/live/tu-dominio/fullchain.pem
+SSLCertificateKeyFile /etc/letsencrypt/live/tu-dominio/privkey.pem
+~~~
+
+## 🔒 Forzar HTTPS en Apache2 (default.conf y .htaccess)
+
+### 1. Configuración en `default.conf` (archivo de configuración de Apache)
+
+Edita tu archivo de configuración del sitio (por ejemplo `/etc/apache2/sites-available/000-default.conf`).
+
+Tienes dos opciones:
+
+**Opción a) Usar `Redirect` directo**
+
+~~~
+<VirtualHost *:80>
+    ServerName pps.edu
+    ServerAlias www.pps.edu
+
+    Redirect permanent / https://pps.edu/
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName pps.edu
+    DocumentRoot /var/www/html
+
+    SSLEngine on
+    SSLCertificateFile /ruta/al/certificado.crt
+    SSLCertificateKeyFile /ruta/a/la/clave.key
+    SSLCertificateChainFile /ruta/a/la/cadena.crt
+
+    # Configuración adicional para HTTPS
+</VirtualHost>
+~~~
+
+---
+
+** Opción b) Usar `RewriteEngine` para mayor flexibilidad**
+```apache
+<VirtualHost *:80>
+    ServerName pps.edu
+    ServerAlias www.pps.edu
+
+    RewriteEngine On
+    RewriteCond %{HTTPS} off
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</VirtualHost>
+```
+
+---
+
+### 2. Configuración en `.htaccess`
+
+Si prefieres hacerlo desde un `.htaccess` en la raíz del proyecto:
+
+~~~
+RewriteEngine On
+
+# Si no está usando HTTPS
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+~~~
+
+> 🔥 **Recuerda:** Para que `.htaccess` funcione correctamente, en tu `default.conf` debes tener habilitado `AllowOverride All`:
+
+~~~
+<Directory /var/www/html>
+    AllowOverride All
+</Directory>
+~~~
+
+También asegúrate que el módulo `mod_rewrite` esté habilitado:
+
+```bash
+sudo a2enmod rewrite
+sudo systemctl reload apache2
+```
+
+---
+
+## 🛡️ Nota de seguridad extra: HSTS (opcional pero recomendado)
+
+Para reforzar aún más tu HTTPS, puedes agregar esta cabecera de seguridad (por ejemplo en tu VirtualHost HTTPS o en `.htaccess`):
+
+```apache
+Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+```
+
+> Esto obliga a los navegadores a recordar usar siempre HTTPS, protegiendo de ataques de tipo *downgrade*.
+
+**Importante**: Asegúrate de que todo tu sitio funcione bien en HTTPS antes de aplicar HSTS.
+
+
+
+
+
+
+
+-----------------------------------------------------------------------
 ~~~
 apt update;apt install openssl
 ~~~
@@ -298,4 +623,349 @@ Aquí está el código securizado:
 > No te olvides de documentarlo convenientemente con explicaciones, capturas de pantalla, etc.
 
 > __Sube a la plataforma, tanto el repositorio comprimido como la dirección https a tu repositorio de Github.__
+
+# Guía Didáctica: Funcionamiento y Configuración de TLS
+
+---
+
+
+## 2. Configuración de TLS
+
+### 2.1 Certificados autofirmados con OpenSSL
+
+Para entornos de prueba o desarrollo, se puede utilizar un **certificado autofirmado**, es decir, un certificado que no ha sido emitido por una entidad de certificación (CA), sino por uno mismo. Aunque no es válido en producción, permite entender el proceso de configuración.
+
+#### Paso 1: Crear la clave privada y el certificado
+
+```bash
+openssl req -x509 -nodes -newkey rsa:2048 -keyout server.key -out server.crt -days 365
+```
+
+**Explicación de los parámetros del comando:**
+
+- `req`: inicia la generación de una solicitud de certificado.
+- `-x509`: crea un certificado autofirmado en lugar de una CSR.
+- `-nodes`: omite el cifrado de la clave privada, evitando el uso de contraseña.
+- `-newkey rsa:2048`: genera una nueva clave RSA de 2048 bits.
+- `-keyout server.key`: nombre del archivo que contendrá la clave privada.
+- `-out server.crt`: nombre del archivo de salida para el certificado.
+- `-days 365`: el certificado será válido por 365 días.
+
+Durante la ejecución del comando, se te solicitará que completes datos como país, nombre de organización, y nombre común (dominio).
+
+### 2.2 Certificados de Let's Encrypt
+
+**Let's Encrypt** es una autoridad certificadora gratuita y automatizada, ideal para sitios en producción.
+
+#### Paso 1: Instalar Certbot
+
+En distribuciones basadas en Debian:
+
+```bash
+sudo apt update
+sudo apt install certbot python3-certbot-apache
+```
+
+#### Paso 2: Obtener el certificado
+
+```bash
+sudo certbot --apache
+```
+
+Este comando detectará automáticamente tu configuración de Apache y te guiará para activar HTTPS en tus sitios. Necesitarás tener el dominio apuntando correctamente al servidor.
+
+#### Renovación automática
+
+Certbot configura automáticamente la renovación automática usando cron o systemd. Puedes comprobarlo con:
+
+```bash
+sudo certbot renew --dry-run
+```
+
+---
+
+## 3. Configurar Apache para usar TLS
+
+Una vez que tengas el certificado y la clave privada, debes configurar Apache para utilizarlos.
+
+Edita el archivo de configuración SSL, por ejemplo: `/etc/apache2/sites-available/default-ssl.conf`
+
+```apacheconf
+<VirtualHost *:443>
+    ServerName www.ejemplo.com
+
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/certs/server.crt
+    SSLCertificateKeyFile /etc/ssl/private/server.key
+
+    DocumentRoot /var/www/html
+</VirtualHost>
+```
+
+Luego habilita SSL y el sitio:
+
+```bash
+sudo a2enmod ssl
+sudo a2ensite default-ssl.conf
+sudo systemctl reload apache2
+```
+
+Si usas Let's Encrypt, las rutas serán distintas (por ejemplo `/etc/letsencrypt/live/tu_dominio/fullchain.pem`).
+
+---
+
+## 4. Verificación de la configuración TLS
+
+### Desde línea de comandos
+
+Puedes usar OpenSSL para verificar la conexión TLS:
+
+```bash
+openssl s_client -connect tu_dominio:443
+```
+
+Este comando muestra detalles del certificado, protocolos admitidos, y cifrados utilizados.
+
+### Desde herramientas online
+
+- **SSL Labs** de Qualys: [https://www.ssllabs.com/ssltest/](https://www.ssllabs.com/ssltest/)
+
+Introduce tu dominio y te generará un informe completo con puntuación, algoritmos, versiones TLS activas y problemas potenciales.
+
+---
+
+## 5. Mitigación de problemas
+
+### 5.1 Deshabilitar versiones inseguras de TLS
+
+Algunas versiones de TLS y SSL están obsoletas y deben desactivarse. Edita `/etc/apache2/mods-available/ssl.conf`:
+
+```apacheconf
+SSLProtocol all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
+```
+
+Esto asegura que solo TLS 1.2 y 1.3 estén habilitados.
+
+### 5.2 HSTS (HTTP Strict Transport Security)
+
+**HSTS** es una política de seguridad que obliga al navegador a acceder siempre mediante HTTPS, incluso si el usuario escribe el dominio sin "https://".
+
+Agrega este encabezado en la configuración del sitio:
+
+```apacheconf
+Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+```
+
+Esto indica que:
+- Se usará HTTPS por al menos 1 año (`max-age=31536000`)
+- Incluye subdominios
+- Se puede incluir en la lista de precarga de navegadores
+
+Habilita el módulo `headers` si no está activo:
+
+```bash
+sudo a2enmod headers
+sudo systemctl restart apache2
+```
+
+---
+
+## 6. Otras buenas prácticas
+
+- **Redirigir HTTP a HTTPS** automáticamente, por ejemplo con:
+
+```apacheconf
+<VirtualHost *:80>
+    ServerName www.ejemplo.com
+    Redirect permanent / https://www.ejemplo.com/
+</VirtualHost>
+```
+
+- **Certificados de 2048 bits o superiores**
+- **Habilitar Forward Secrecy** (viene por defecto con TLS 1.3)
+- **Revisar caducidad de certificados** y configurar alertas si es necesario
+- **Evitar cifrados débiles**, configurando los parámetros `SSLCipherSuite` correctamente
+
+---
+
+Esta guía está diseñada para ayudarte a enseñar cómo funciona TLS desde una perspectiva teórica y práctica. Puedes complementar esta información con laboratorios de configuración y análisis de vulnerabilidades usando herramientas como Wireshark o burp suite para mostrar cómo TLS protege los datos en tránsito.
+
+# Guía Didáctica: Funcionamiento y Configuración de TLS
+
+---
+
+## 1. ¿Qué es TLS?
+
+**TLS (Transport Layer Security)** es un protocolo criptográfico que proporciona comunicaciones seguras sobre redes de computadoras, especialmente en internet. Su objetivo principal es proteger la confidencialidad e integridad de los datos transmitidos entre aplicaciones, como navegadores web y servidores.
+
+TLS es el sucesor de **SSL (Secure Sockets Layer)**. Aunque SSL fue ampliamente utilizado, sus versiones han quedado obsoletas debido a múltiples vulnerabilidades. Hoy en día, TLS en sus versiones 1.2 y 1.3 es el estándar de facto para la seguridad en la web.
+
+**TLS proporciona:**
+
+- **Confidencialidad:** gracias al cifrado de los datos en tránsito.
+- **Integridad:** mediante funciones hash que detectan alteraciones.
+- **Autenticación:** utilizando certificados digitales que identifican a las partes.
+
+---
+
+## 2. Configuración de TLS
+
+### 2.1 Certificados autofirmados con OpenSSL
+
+Para entornos de prueba o desarrollo, se puede utilizar un **certificado autofirmado**, es decir, un certificado que no ha sido emitido por una entidad de certificación (CA), sino por uno mismo. Aunque no es válido en producción, permite entender el proceso de configuración.
+
+#### Paso 1: Crear la clave privada y el certificado
+
+```bash
+openssl req -x509 -nodes -newkey rsa:2048 -keyout server.key -out server.crt -days 365
+```
+
+**Explicación de los parámetros del comando:**
+
+- `req`: inicia la generación de una solicitud de certificado.
+- `-x509`: crea un certificado autofirmado en lugar de una CSR.
+- `-nodes`: omite el cifrado de la clave privada, evitando el uso de contraseña.
+- `-newkey rsa:2048`: genera una nueva clave RSA de 2048 bits.
+- `-keyout server.key`: nombre del archivo que contendrá la clave privada.
+- `-out server.crt`: nombre del archivo de salida para el certificado.
+- `-days 365`: el certificado será válido por 365 días.
+
+Durante la ejecución del comando, se te solicitará que completes datos como país, nombre de organización, y nombre común (dominio).
+
+### 2.2 Certificados de Let's Encrypt
+
+**Let's Encrypt** es una autoridad certificadora gratuita y automatizada, ideal para sitios en producción.
+
+#### Paso 1: Instalar Certbot
+
+En distribuciones basadas en Debian:
+
+```bash
+sudo apt update
+sudo apt install certbot python3-certbot-apache
+```
+
+#### Paso 2: Obtener el certificado
+
+```bash
+sudo certbot --apache
+```
+
+Este comando detectará automáticamente tu configuración de Apache y te guiará para activar HTTPS en tus sitios. Necesitarás tener el dominio apuntando correctamente al servidor.
+
+#### Renovación automática
+
+Certbot configura automáticamente la renovación automática usando cron o systemd. Puedes comprobarlo con:
+
+```bash
+sudo certbot renew --dry-run
+```
+
+---
+
+## 3. Configurar Apache para usar TLS
+
+Una vez que tengas el certificado y la clave privada, debes configurar Apache para utilizarlos.
+
+Edita el archivo de configuración SSL, por ejemplo: `/etc/apache2/sites-available/default-ssl.conf`
+
+```apacheconf
+<VirtualHost *:443>
+    ServerName www.ejemplo.com
+
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/certs/server.crt
+    SSLCertificateKeyFile /etc/ssl/private/server.key
+
+    DocumentRoot /var/www/html
+</VirtualHost>
+```
+
+Luego habilita SSL y el sitio:
+
+```bash
+sudo a2enmod ssl
+sudo a2ensite default-ssl.conf
+sudo systemctl reload apache2
+```
+
+Si usas Let's Encrypt, las rutas serán distintas (por ejemplo `/etc/letsencrypt/live/tu_dominio/fullchain.pem`).
+
+---
+
+## 4. Verificación de la configuración TLS
+
+### Desde línea de comandos
+
+Puedes usar OpenSSL para verificar la conexión TLS:
+
+```bash
+openssl s_client -connect tu_dominio:443
+```
+
+Este comando muestra detalles del certificado, protocolos admitidos, y cifrados utilizados.
+
+### Desde herramientas online
+
+- **SSL Labs** de Qualys: [https://www.ssllabs.com/ssltest/](https://www.ssllabs.com/ssltest/)
+
+Introduce tu dominio y te generará un informe completo con puntuación, algoritmos, versiones TLS activas y problemas potenciales.
+
+---
+
+## 5. Mitigación de problemas
+
+### 5.1 Deshabilitar versiones inseguras de TLS
+
+Algunas versiones de TLS y SSL están obsoletas y deben desactivarse. Edita `/etc/apache2/mods-available/ssl.conf`:
+
+```apacheconf
+SSLProtocol all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
+```
+
+Esto asegura que solo TLS 1.2 y 1.3 estén habilitados.
+
+### 5.2 HSTS (HTTP Strict Transport Security)
+
+**HSTS** es una política de seguridad que obliga al navegador a acceder siempre mediante HTTPS, incluso si el usuario escribe el dominio sin "https://".
+
+Agrega este encabezado en la configuración del sitio:
+
+```apacheconf
+Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+```
+
+Esto indica que:
+- Se usará HTTPS por al menos 1 año (`max-age=31536000`)
+- Incluye subdominios
+- Se puede incluir en la lista de precarga de navegadores
+
+Habilita el módulo `headers` si no está activo:
+
+```bash
+sudo a2enmod headers
+sudo systemctl restart apache2
+```
+
+---
+
+## 6. Otras buenas prácticas
+
+- **Redirigir HTTP a HTTPS** automáticamente, por ejemplo con:
+
+```apacheconf
+<VirtualHost *:80>
+    ServerName www.ejemplo.com
+    Redirect permanent / https://www.ejemplo.com/
+</VirtualHost>
+```
+
+- **Certificados de 2048 bits o superiores**
+- **Habilitar Forward Secrecy** (viene por defecto con TLS 1.3)
+- **Revisar caducidad de certificados** y configurar alertas si es necesario
+- **Evitar cifrados débiles**, configurando los parámetros `SSLCipherSuite` correctamente
+
+---
+
+Esta guía está diseñada para ayudarte a enseñar cómo funciona TLS desde una perspectiva teórica y práctica. Puedes complementar esta información con laboratorios de configuración y análisis de vulnerabilidades usando herramientas como Wireshark o burp suite para mostrar cómo TLS protege los datos en tránsito.
 
