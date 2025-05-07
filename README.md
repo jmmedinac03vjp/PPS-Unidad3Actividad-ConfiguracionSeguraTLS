@@ -225,293 +225,6 @@ sudo certbot renew --dry-run
 ~~~
 
 
-### Configurar Apache para usar HTTPS
----
-
-Una vez que tengas el certificado y la clave privada, debes configurar Apache para utilizarlos.
-
-
-Editar el archivo de configuración de Apache `default-ssl.conf`:
-
-~~~
-nano /etc/apache2/sites-available/default-ssl.conf
-~~~
-
-Lo modificamos y dejamos así:
-
-~~~
-<VirtualHost *:80>
-
-    ServerName www.pps.edu
-
-    ServerAdmin webmaster@localhost
-    DocumentRoot /var/www/html
-
-    ErrorLog ${APACHE_LOG_DIR}/error.log
-    CustomLog ${APACHE_LOG_DIR}/access.log combined
-
-</VirtualHost>
-
-<VirtualHost *:443>
-    ServerName www.pps.edu
-
-    # activar uso del motor de protocolo SSL
-    SSLEngine on
-    SSLCertificateFile /etc/apache2/ssl/server.crt
-    SSLCertificateKeyFile /etc/apache2/ssl/server.key
-
-    DocumentRoot /var/www/html
-</VirtualHost>
-~~~
-
-Date cuenta que hemos creado un **servidor virtual** con nombre **www.pps.edu**. A partir de ahora tendremos que introducir en la barra de dirección del navegador `https://www.pps.edu` en vez de `https://localhost`.
-
-### Habilitar SSL y el sitio:
----
-
-En el servidor Apache, activamos **SSL** mediante la habilitación de la configuración `default-ssl.conf`que hemos creado:
-
-Fíjate que  tenemos todavía habilitado la configuración del sitio por defecto `000-default.conf`, y que en la configuración `default-ssl`estamos configurando tanto el puerto `http` **Puerto 80** como el puerto de `https`**Puerto 443**.
-
-Por lo tanto deberíamos deshabilitar la configuración por defecto:
-
-```apache
-a2dissite 000-default.conf
-```
-
-Para habilitar ssl y la configuración de ssl realizamos:
-
-```bash 
-a2enmod ssl
-a2ensite default-ssl.conf
-service apache2 reload
-```
-
-
-### Resolución local de nombres: dns o fichero **/etc/hosts**
-
-Nuestro navegador resuleve la dirección www.google.com o cualquier otra asociándole la ip donde se encuentra en el servidor, eso es debido a la resolución de servidores dns.
-
-En el caso de nuestros sitios virtuales, si no están incluidos en los servidores dns, para hacer pruebas en nuestro ordenador, hemos de modificar las rutas en nuestro equipo para que pueda asociar estos nombres (ficticios) con la ip loc>
-
-Debemos editar el fichero hosts para que nos devuelva la dirección del bucle local (127.0.0.1) cuando el navegador pida la url www.pps.net o cualquier otra asociada con un host virtual.
-
-Este fichero está en /etc/hosts.
-
-archivo `/etc/hosts`
-``` 
-127.0.0.1       pps.edu www.pps.edu
-```
-
-En los casos asociamos los nombres de los host virtuales a localhost tal y como se muestra en la imagen.
-
-![](images/hard3.png)
-
-Además en el archivo `/etc/hosts` vemos cómo dirección de nuestro servidor apache. En nuestro caso `172.20.0.5`
-
-No obstante puedes consultarlo en docker con el comando:
-
-~~~
-docker inspect lamp-php83 |grep IPAddress
-~~~
-
-Si queremos acceder a este servidor virtual desde otros equipos de la red, o si estamos utilizando docker y queremos acceder a ellos desde nuestro navegador, tenemos que añadir en el /etc/hosts una linea que vincule la dirección ip con >
-
-![](images/hard4.png)
-
-Ahora el servidor soportaría **HTTPS**. Accedemos al servidor en la siguiente dirección: `https://www.pps.edu`
-
-![](images/TLS15.png)
-
-Nos dá un aviso de que es un servidor inseguro, por lo que pulsamos `avanzado`y `Acceder a sitio inseguro`.
-
-![](images/TLS16.png)
-
-## Verificar la configuración con SSL Labs (con dominio)
-
-Para asegurarse de que la configuración de TLS es segura, se puede comprobar el dominio en: SSL Labs Test. El servidor tiene que ser accesible desde internet. No funcionará en modo local si no abrimos los puertos de nuestro router.
-
-<https://www.ssllabs.com/ssltest/>
-
-![](images/TLS17.png)
-
-Además podemos obtener información extensa sobre el certificado y `SSL`.
-
-![](images/TLS18.png)
-
-##  Deshabilitar versiones inseguras de TLS
-
-Para evitar vulnerabilidades, en default-ssl.conf, en la sección de ssl, configurar:
-
-archivo `/etc/apache2/sites-available/default-ssl.conf`
-```apache
-SSLProtocol TLSv1.2 TLSv1.3
-SSLCipherSuite HIGH:!aNULL:!MD5
-```
-- `SSLCipherSuite HIGH:!aNULL:!MD5` Garantiza un cifrado SSL con un alta grado de protección.
-
-**En sistemas más actualizados, se puede reemplazar:**
-
-```apache
-SSLProtocol TLSv1.2 TLSv1.3
-SSLCipherSuite HIGH:!aNULL:!MD5
-```
-por:
-```apache
-SSLOpenSSLConfCmd MinProtocol TLSv1.3
-SSLOpenSSLConfCmd CipherString DEFAULT@SECLEVEL=2
-```
-Esto usa los ajustes por defecto del sistema con un buen nivel de seguridad (SECLEVEL=2 es el mínimo recomendado para producción).
-
-**Notas importantes:**
-• Esta opción requiere Apache 2.4.43 o superior y OpenSSL 1.1.1 o superior.
-
-• Si se usa SSLOpenSSLConfCmd , es preferible no usar SSLProtocol, para evitar conflictos.
-
-• Se puede usar también `SSLOpenSSLConfCmd CipherString` para definir el conjunto de cifrados (similar a `SSLCipherSuite` pero más moderno y compatible con OpenSSL 1.1.1+ y 3.0+).
-
-## Verificación de funcionamiento de TLS
-
-Se puede verificar de manera local que la configuración TLS está funcionando correctamente, especialmente útil cuando:
-
-- No se dispone de un dominio público.
-
-- Se está trabajando en un entorno de desarrollo o laboratorio.
-
-- Se quiere confirmar que TLS 1.3 está habilitado y operativo antes de poner el servidor en producción.
-
-```bash
-openssl s_client -connect localhost:443 -tls1_3
-```
-
-Este comando:
-
-• Intenta establecer una conexión TLS específicamente con la versión 1.3.
-
-• Muestra un resumen de la negociación TLS, incluyendo:
-   
-	- La versión del protocolo usada.
-
-	- El certificado presentado.
-
-	- El conjunto de cifrado negociado.
-
-Si se obtiene en la salida:
-```Protocol
- : TLSv1.3
-Cipher
- : TLS_AES_256_GCM_SHA384
-....
-```
-
-entonces TLS 1.3 está activo y funcionando.
-
-![](images/TLS23.png)
-
-Con el siguiente comando basado en nmap, hacemos un escaneo y enumeramos todas las versiones de TLS y conjuntos de cifrado  que el servidor acepta.
-
-```bash
-nmap --script ssl-enum-ciphers -p 443 localhost
-```
-
-![](images/TLS24.png)
-
-Requiere tener el paquete nmap instalado: 
-
-``` bash
-sudo apt install nmap
-```
-
-Esto confirma que el servidor acepta solo TLSv1.2 y TLSv1.3 (si se configuró correctamente la exclusión de versiones antiguas).
-
-
-## ¿Cómo eliminar la advertencia del candado? (Opcional)
-
-Si solo trabajas en local, no hay problema en ignorar la advertencia. Pero si se quiere que el navegador lo reconozca como seguro sin advertencias, dado que Firefox solo permite importar certificados de CA en la pestaña "Authorities", se debe generar un certificado raíz de CA y luego firmar el certificado con él.
-
-
-4. Importar la CA en Firefox
-
-Como estamos con docker,
-
-Importar `server.crt` en la pestaña "Authorities" de Firefox:
-
-1. Abrir Firefox e ir a `Ajustes` > `Privacidad & Seguridad`
-
-2. En apartado `Seguridad`, en `Avanzado` y seleccionar `Gestionar certificados`
-
-3. En la pestaña `Tus Certificados` y seleccionar `Importar`...
-
-![](images/TLS20.png)
-
-4. Como tenemos nuestro servidor en docker, pero tenemos un volumen montado para la configuración, podemos acceder a los certificados en la ruta `docker-compose-lamp/config/ssl/etc/apache2/ssl/server.crt`(donde docker-compose-lamp es la carpeta donde se encuentra el `docker-compose.yml` de nuestro escenario multicontenedor. Copia el Archivo `server.crt` a tu sistema de archivos para que no haya problema con los permisos y lo seleccionas ahí.
-
-5. Marcar la casilla "Confiar en esta CA para identificar sitios web"
-
-![](images/TLS20.png)
-
-6. Guardar los cambios.
-
-Firefox confiará en los certificados firmados por esta CA, y la advertencia debería desaparecer.
-
----
-
-## 🛡️ Nota de seguridad extra: HSTS (opcional pero recomendado)
-
-Para reforzar aún más tu HTTPS, puedes agregar esta cabecera de seguridad (por ejemplo en tu VirtualHost HTTPS o en `.htaccess`):
-
-El fichero de configuración quedaría así:
-
-```apache
-<VirtualHost *:80>
-
-    ServerName www.pps.edu
-
-    ServerAdmin webmaster@localhost
-    DocumentRoot /var/www/html
-
-    ErrorLog ${APACHE_LOG_DIR}/error.log
-    CustomLog ${APACHE_LOG_DIR}/access.log combined
-
-</VirtualHost>
-
-<VirtualHost *:443>
-    ServerName www.pps.edu
-
-    DocumentRoot /var/www/html
-
-    #activar uso del motor de protocolo SSL
-    SSLEngine on
-    SSLCertificateFile /etc/apache2/ssl/server.crt
-    SSLCertificateKeyFile /etc/apache2/ssl/server.key
-    # solo usar versiones modernas
-    SSLProtocol TLSv1.2 TLSv1.3
-    # Forzar solo cifrados seguros
-    SSLCipherSuite HIGH:!aNULL:!MD5
-    # Activar HSTS
-    Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
-</VirtualHost>
-```
-
-> Esto obliga a los navegadores a recordar usar siempre HTTPS, protegiendo de ataques de tipo *downgrade*.
-
-**Importante**: Asegúrate de que todo tu sitio funcione bien en HTTPS antes de aplicar HSTS.
-
-
-## ENTREGA
-
-> __Realiza las operaciones indicadas__
-
-> __Crea un repositorio  con nombre PPS-Unidad3Actividad6-Tu-Nombre donde documentes la realización de ellos.__
-
-> No te olvides de documentarlo convenientemente con explicaciones, capturas de pantalla, etc.
-
-> __Sube a la plataforma, tanto el repositorio comprimido como la dirección https a tu repositorio de Github.__
-
-# Guía Didáctica: Funcionamiento y Configuración de TLS
-
----
-
 
 ## 2. Configuración de TLS
 
@@ -618,11 +331,136 @@ Introduce tu dominio y te generará un informe completo con puntuación, algorit
 
 ---
 
-## 5. Mitigación de problemas
+## Mitigación de problemas
 
-### 5.1 Deshabilitar versiones inseguras de TLS
+### Configurar Apache para usar HTTPS
+---
 
-Algunas versiones de TLS y SSL están obsoletas y deben desactivarse. Edita `/etc/apache2/mods-available/ssl.conf`:
+Una vez que tengas el certificado y la clave privada, debes configurar Apache para utilizarlos.
+
+
+Editar el archivo de configuración de Apache `default-ssl.conf`:
+
+~~~
+nano /etc/apache2/sites-available/default-ssl.conf
+~~~
+
+Lo modificamos y dejamos así:
+
+~~~
+<VirtualHost *:80>
+
+    ServerName www.pps.edu
+
+    ServerAdmin webmaster@localhost
+    DocumentRoot /var/www/html
+
+    ErrorLog ${APACHE_LOG_DIR}/error.log
+    CustomLog ${APACHE_LOG_DIR}/access.log combined
+
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName www.pps.edu
+
+    # activar uso del motor de protocolo SSL
+    SSLEngine on
+    SSLCertificateFile /etc/apache2/ssl/server.crt
+    SSLCertificateKeyFile /etc/apache2/ssl/server.key
+
+    DocumentRoot /var/www/html
+</VirtualHost>
+~~~
+
+Date cuenta que hemos creado un **servidor virtual** con nombre **www.pps.edu**. A partir de ahora tendremos que introducir en la barra de dirección del navegador `https://www.pps.edu` en vez de `https://localhost`.
+
+### Habilitar SSL y el sitio:
+---
+
+En el servidor Apache, activamos **SSL** mediante la habilitación de la configuración `default-ssl.conf`que hemos creado:
+
+Fíjate que  tenemos todavía habilitado la configuración del sitio por defecto `000-default.conf`, y que en la configuración `default-ssl`estamos configurando tanto el puerto `http` **Puerto 80** como el puerto de `https`**Puerto 443**.
+
+Por lo tanto deberíamos deshabilitar la configuración por defecto:
+
+```apache
+a2dissite 000-default.conf
+```
+
+Para habilitar ssl y la configuración de ssl realizamos:
+
+```bash 
+a2enmod ssl
+a2ensite default-ssl.conf
+service apache2 reload
+```
+
+
+### Resolución local de nombres: dns o fichero **/etc/hosts**
+
+Nuestro navegador resuleve la dirección www.google.com o cualquier otra asociándole la ip donde se encuentra en el servidor, eso es debido a la resolución de servidores dns.
+
+En el caso de nuestros sitios virtuales, si no están incluidos en los servidores dns, para hacer pruebas en nuestro ordenador, hemos de modificar las rutas en nuestro equipo para que pueda asociar estos nombres (ficticios) con la ip loc>
+
+Debemos editar el fichero hosts para que nos devuelva la dirección del bucle local (127.0.0.1) cuando el navegador pida la url www.pps.net o cualquier otra asociada con un host virtual.
+
+Este fichero está en /etc/hosts.
+
+archivo `/etc/hosts`
+``` 
+127.0.0.1       pps.edu www.pps.edu
+```
+
+En los casos asociamos los nombres de los host virtuales a localhost tal y como se muestra en la imagen.
+
+![](images/hard3.png)
+
+Además en el archivo `/etc/hosts` vemos cómo dirección de nuestro servidor apache. En nuestro caso `172.20.0.5`
+
+No obstante puedes consultarlo en docker con el comando:
+
+~~~
+docker inspect lamp-php83 |grep IPAddress
+~~~
+
+Si queremos acceder a este servidor virtual desde otros equipos de la red, o si estamos utilizando docker y queremos acceder a ellos desde nuestro navegador, tenemos que añadir en el /etc/hosts una linea que vincule la dirección ip con >
+
+![](images/hard4.png)
+
+Ahora el servidor soportaría **HTTPS**. Accedemos al servidor en la siguiente dirección: `https://www.pps.edu`
+
+![](images/TLS15.png)
+
+Nos dá un aviso de que es un servidor inseguro, por lo que pulsamos `avanzado`y `Acceder a sitio inseguro`.
+
+![](images/TLS16.png)
+ 
+
+## Verificar la configuración con SSL Labs (con dominio)
+
+Para asegurarse de que la configuración de TLS es segura, se puede comprobar el dominio en: SSL Labs Test. El servidor tiene que ser accesible desde internet. No funcionará en modo local si no abrimos los puertos de nuestro router.
+
+<https://www.ssllabs.com/ssltest/>
+
+![](images/TLS17.png)
+
+Además podemos obtener información extensa sobre el certificado y `SSL`.
+
+![](images/TLS18.png)
+
+
+##  Deshabilitar versiones inseguras de TLS
+
+Para evitar vulnerabilidades, en default-ssl.conf, en la sección de ssl, configurar:
+
+archivo `/etc/apache2/sites-available/default-ssl.conf`
+```apache
+SSLProtocol TLSv1.2 TLSv1.3
+SSLCipherSuite HIGH:!aNULL:!MD5
+```
+- `SSLCipherSuite HIGH:!aNULL:!MD5` Garantiza un cifrado SSL con un alta grado de protección.
+
+También podemos eliminar las versiones antiguas con:
 
 ```apacheconf
 SSLProtocol all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
@@ -630,7 +468,31 @@ SSLProtocol all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
 
 Esto asegura que solo TLS 1.2 y 1.3 estén habilitados.
 
-### 5.2 HSTS (HTTP Strict Transport Security)
+**En sistemas más actualizados, se puede reemplazar:**
+
+```apache
+SSLProtocol TLSv1.2 TLSv1.3
+SSLCipherSuite HIGH:!aNULL:!MD5
+```
+por:
+```apache
+SSLOpenSSLConfCmd MinProtocol TLSv1.3
+SSLOpenSSLConfCmd CipherString DEFAULT@SECLEVEL=2
+```
+Esto usa los ajustes por defecto del sistema con un buen nivel de seguridad (SECLEVEL=2 es el mínimo recomendado para producción).
+
+
+**Notas importantes:**
+
+• Esta opción requiere Apache 2.4.43 o superior y OpenSSL 1.1.1 o superior.
+
+• Si se usa SSLOpenSSLConfCmd , es preferible no usar SSLProtocol, para evitar conflictos.
+
+• Se puede usar también `SSLOpenSSLConfCmd CipherString` para definir el conjunto de cifrados (similar a `SSLCipherSuite` pero más moderno y compatible con OpenSSL 1.1.1+ y 3.0+).
+
+
+
+## 🛡️ Nota de seguridad extra: HSTS (opcional pero recomendado)
 
 **HSTS** es una política de seguridad que obliga al navegador a acceder siempre mediante HTTPS, incluso si el usuario escribe el dominio sin "https://".
 
@@ -652,9 +514,46 @@ sudo a2enmod headers
 sudo systemctl restart apache2
 ```
 
+
+El fichero de configuración quedaría así:
+
+```apache
+<VirtualHost *:80>
+
+    ServerName www.pps.edu
+
+    ServerAdmin webmaster@localhost
+    DocumentRoot /var/www/html
+
+    ErrorLog ${APACHE_LOG_DIR}/error.log
+    CustomLog ${APACHE_LOG_DIR}/access.log combined
+
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName www.pps.edu
+
+    DocumentRoot /var/www/html
+
+    #activar uso del motor de protocolo SSL
+    SSLEngine on
+    SSLCertificateFile /etc/apache2/ssl/server.crt
+    SSLCertificateKeyFile /etc/apache2/ssl/server.key
+    # solo usar versiones modernas
+    SSLProtocol TLSv1.2 TLSv1.3
+    # Forzar solo cifrados seguros
+    SSLCipherSuite HIGH:!aNULL:!MD5
+    # Activar HSTS
+    Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+</VirtualHost>
+```
+
+> Esto obliga a los navegadores a recordar usar siempre HTTPS, protegiendo de ataques de tipo *downgrade*.
+
+**Importante**: Asegúrate de que todo tu sitio funcione bien en HTTPS antes de aplicar HSTS.
 ---
 
-## 6. Otras buenas prácticas
+##  Otras buenas prácticas
 
 - **Redirigir HTTP a HTTPS** automáticamente, por ejemplo con:
 
@@ -671,6 +570,108 @@ sudo systemctl restart apache2
 - **Evitar cifrados débiles**, configurando los parámetros `SSLCipherSuite` correctamente
 
 ---
+## Verificación de funcionamiento de TLS
+
+Se puede verificar de manera local que la configuración TLS está funcionando correctamente, especialmente útil cuando:
+
+- No se dispone de un dominio público.
+
+- Se está trabajando en un entorno de desarrollo o laboratorio.
+
+- Se quiere confirmar que TLS 1.3 está habilitado y operativo antes de poner el servidor en producción.
+
+```bash
+openssl s_client -connect localhost:443 -tls1_3
+```
+
+Este comando:
+
+• Intenta establecer una conexión TLS específicamente con la versión 1.3.
+
+• Muestra un resumen de la negociación TLS, incluyendo:
+   
+	- La versión del protocolo usada.
+
+	- El certificado presentado.
+
+	- El conjunto de cifrado negociado.
+
+Si se obtiene en la salida:
+```Protocol
+ : TLSv1.3
+Cipher
+ : TLS_AES_256_GCM_SHA384
+....
+```
+
+entonces TLS 1.3 está activo y funcionando.
+
+![](images/TLS23.png)
+
+Con el siguiente comando basado en nmap, hacemos un escaneo y enumeramos todas las versiones de TLS y conjuntos de cifrado  que el servidor acepta.
+
+```bash
+nmap --script ssl-enum-ciphers -p 443 localhost
+```
+
+![](images/TLS24.png)
+
+Requiere tener el paquete nmap instalado: 
+
+``` bash
+sudo apt install nmap
+```
+
+Esto confirma que el servidor acepta solo TLSv1.2 y TLSv1.3 (si se configuró correctamente la exclusión de versiones antiguas).
+
+
+## ¿Cómo eliminar la advertencia del candado? (Opcional)
+
+Si solo trabajas en local, no hay problema en ignorar la advertencia. Pero si se quiere que el navegador lo reconozca como seguro sin advertencias, dado que Firefox solo permite importar certificados de CA en la pestaña "Authorities", se debe generar un certificado raíz de CA y luego firmar el certificado con él.
+
+
+4. Importar la CA en Firefox
+
+Como estamos con docker,
+
+Importar `server.crt` en la pestaña "Authorities" de Firefox:
+
+1. Abrir Firefox e ir a `Ajustes` > `Privacidad & Seguridad`
+
+2. En apartado `Seguridad`, en `Avanzado` y seleccionar `Gestionar certificados`
+
+3. En la pestaña `Tus Certificados` y seleccionar `Importar`...
+
+![](images/TLS20.png)
+
+4. Como tenemos nuestro servidor en docker, pero tenemos un volumen montado para la configuración, podemos acceder a los certificados en la ruta `docker-compose-lamp/config/ssl/etc/apache2/ssl/server.crt`(donde docker-compose-lamp es la carpeta donde se encuentra el `docker-compose.yml` de nuestro escenario multicontenedor. Copia el Archivo `server.crt` a tu sistema de archivos para que no haya problema con los permisos y lo seleccionas ahí.
+
+5. Marcar la casilla "Confiar en esta CA para identificar sitios web"
+
+![](images/TLS20.png)
+
+6. Guardar los cambios.
+
+Firefox confiará en los certificados firmados por esta CA, y la advertencia debería desaparecer.
+
+---
+
+
+
+## ENTREGA
+
+> __Realiza las operaciones indicadas__
+
+> __Crea un repositorio  con nombre PPS-Unidad3Actividad6-Tu-Nombre donde documentes la realización de ellos.__
+
+> No te olvides de documentarlo convenientemente con explicaciones, capturas de pantalla, etc.
+
+> __Sube a la plataforma, tanto el repositorio comprimido como la dirección https a tu repositorio de Github.__
+
+# Guía Didáctica: Funcionamiento y Configuración de TLS
+
+---
+
 
 Esta guía está diseñada para ayudarte a enseñar cómo funciona TLS desde una perspectiva teórica y práctica. Puedes complementar esta información con laboratorios de configuración y análisis de vulnerabilidades usando herramientas como Wireshark o burp suite para mostrar cómo TLS protege los datos en tránsito.
 
