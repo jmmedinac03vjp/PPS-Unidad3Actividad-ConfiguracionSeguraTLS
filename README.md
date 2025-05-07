@@ -563,7 +563,7 @@ Importar `server.crt` en la pestaña "Authorities" de Firefox:
 
 5. Marcar la casilla "Confiar en esta CA para identificar sitios web"
 
-![](images/TLS20.png)
+![](images/TLS21.png)
 
 6. Guardar los cambios.
 
