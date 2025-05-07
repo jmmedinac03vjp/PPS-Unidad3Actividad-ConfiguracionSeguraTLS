@@ -30,7 +30,7 @@ TLS es el sucesor de **SSL (Secure Sockets Layer)**. Aunque SSL fue ampliamente 
 
 Vamos realizando operaciones:
 
-## Iniciar entorno de pruebas
+# Iniciar entorno de pruebas
 
 Situáte en la carpeta de del entorno de pruebas de nuestro servidor LAMP e inicia el escenario multicontendor:
 
@@ -44,7 +44,7 @@ Para acceder a nuestro servidor apache:
 docker exec -it lamp-php83 /bin/bash
 ~~~
 
-## 1. Habilitar HTTPS con SSL/TLS en Servidor Apache
+## 1. Obtención o generación del certificado
 ---
 
 Para proteger nuestro servidor es crucial habilitar HTTPS en el servidor local. Veamos cómo podemos habilitarlo en Apache con dos métodos diferentes.
@@ -225,116 +225,7 @@ sudo certbot renew --dry-run
 ~~~
 
 
-
-## 2. Configuración de TLS
-
-### 2.1 Certificados autofirmados con OpenSSL
-
-Para entornos de prueba o desarrollo, se puede utilizar un **certificado autofirmado**, es decir, un certificado que no ha sido emitido por una entidad de certificación (CA), sino por uno mismo. Aunque no es válido en producción, permite entender el proceso de configuración.
-
-#### Paso 1: Crear la clave privada y el certificado
-
-```bash
-openssl req -x509 -nodes -newkey rsa:2048 -keyout server.key -out server.crt -days 365
-```
-
-**Explicación de los parámetros del comando:**
-
-- `req`: inicia la generación de una solicitud de certificado.
-- `-x509`: crea un certificado autofirmado en lugar de una CSR.
-- `-nodes`: omite el cifrado de la clave privada, evitando el uso de contraseña.
-- `-newkey rsa:2048`: genera una nueva clave RSA de 2048 bits.
-- `-keyout server.key`: nombre del archivo que contendrá la clave privada.
-- `-out server.crt`: nombre del archivo de salida para el certificado.
-- `-days 365`: el certificado será válido por 365 días.
-
-Durante la ejecución del comando, se te solicitará que completes datos como país, nombre de organización, y nombre común (dominio).
-
-### 2.2 Certificados de Let's Encrypt
-
-**Let's Encrypt** es una autoridad certificadora gratuita y automatizada, ideal para sitios en producción.
-
-#### Paso 1: Instalar Certbot
-
-En distribuciones basadas en Debian:
-
-```bash
-sudo apt update
-sudo apt install certbot python3-certbot-apache
-```
-
-#### Paso 2: Obtener el certificado
-
-```bash
-sudo certbot --apache
-```
-
-Este comando detectará automáticamente tu configuración de Apache y te guiará para activar HTTPS en tus sitios. Necesitarás tener el dominio apuntando correctamente al servidor.
-
-#### Renovación automática
-
-Certbot configura automáticamente la renovación automática usando cron o systemd. Puedes comprobarlo con:
-
-```bash
-sudo certbot renew --dry-run
-```
-
----
-
-## 3. Configurar Apache para usar TLS
-
-Una vez que tengas el certificado y la clave privada, debes configurar Apache para utilizarlos.
-
-Edita el archivo de configuración SSL, por ejemplo: `/etc/apache2/sites-available/default-ssl.conf`
-
-```apacheconf
-<VirtualHost *:443>
-    ServerName www.ejemplo.com
-
-    SSLEngine on
-    SSLCertificateFile /etc/ssl/certs/server.crt
-    SSLCertificateKeyFile /etc/ssl/private/server.key
-
-    DocumentRoot /var/www/html
-</VirtualHost>
-```
-
-Luego habilita SSL y el sitio:
-
-```bash
-sudo a2enmod ssl
-sudo a2ensite default-ssl.conf
-sudo systemctl reload apache2
-```
-
-Si usas Let's Encrypt, las rutas serán distintas (por ejemplo `/etc/letsencrypt/live/tu_dominio/fullchain.pem`).
-
----
-
-## 4. Verificación de la configuración TLS
-
-### Desde línea de comandos
-
-Puedes usar OpenSSL para verificar la conexión TLS:
-
-```bash
-openssl s_client -connect tu_dominio:443
-```
-
-Este comando muestra detalles del certificado, protocolos admitidos, y cifrados utilizados.
-
-### Desde herramientas online
-
-- **SSL Labs** de Qualys: [https://www.ssllabs.com/ssltest/](https://www.ssllabs.com/ssltest/)
-
-Introduce tu dominio y te generará un informe completo con puntuación, algoritmos, versiones TLS activas y problemas potenciales.
-
----
-
-## Mitigación de problemas
-
-### Configurar Apache para usar HTTPS
----
+## 2. Configurar Apache para usar TLS
 
 Una vez que tengas el certificado y la clave privada, debes configurar Apache para utilizarlos.
 
@@ -373,6 +264,7 @@ Lo modificamos y dejamos así:
 ~~~
 
 Date cuenta que hemos creado un **servidor virtual** con nombre **www.pps.edu**. A partir de ahora tendremos que introducir en la barra de dirección del navegador `https://www.pps.edu` en vez de `https://localhost`.
+
 
 ### Habilitar SSL y el sitio:
 ---
@@ -436,7 +328,25 @@ Nos dá un aviso de que es un servidor inseguro, por lo que pulsamos `avanzado`y
 ![](images/TLS16.png)
  
 
-## Verificar la configuración con SSL Labs (con dominio)
+## 3. Verificación de la configuración TLS
+
+### Desde línea de comandos
+
+Puedes usar OpenSSL para verificar la conexión TLS:
+
+```bash
+openssl s_client -connect tu_dominio:443
+```
+
+Este comando muestra detalles del certificado, protocolos admitidos, y cifrados utilizados.
+
+
+- **SSL Labs** de Qualys: [https://www.ssllabs.com/ssltest/](https://www.ssllabs.com/ssltest/)
+
+Introduce tu dominio y te generará un informe completo con puntuación, algoritmos, versiones TLS activas y problemas potenciales.
+
+
+### Desde herramientas online
 
 Para asegurarse de que la configuración de TLS es segura, se puede comprobar el dominio en: SSL Labs Test. El servidor tiene que ser accesible desde internet. No funcionará en modo local si no abrimos los puertos de nuestro router.
 
@@ -448,6 +358,9 @@ Además podemos obtener información extensa sobre el certificado y `SSL`.
 
 ![](images/TLS18.png)
 
+
+
+## 4. Mitigación de problemas
 
 ##  Deshabilitar versiones inseguras de TLS
 
