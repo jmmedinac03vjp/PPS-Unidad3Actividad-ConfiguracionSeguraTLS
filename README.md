@@ -47,9 +47,6 @@ docker exec -it lamp-php83 /bin/bash
 ## 1. Obtención o generación del certificado
 ---
 
-Para proteger nuestro servidor es crucial habilitar HTTPS en el servidor local. Veamos cómo podemos habilitarlo en Apache con dos métodos diferentes.
-
-### Obtención del certíficado
 
 Para utilizar protocolos SSL tenemos que tener un certificado que indique quienes sómos. Podemos hacerlo de dos formas:
 
