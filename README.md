@@ -64,22 +64,43 @@ Para utilizar protocolos SSL tenemos que tener un certificado que indique quiene
 Para entornos de prueba o desarrollo, se puede utilizar un **certificado autofirmado**, es decir, un certificado que no ha sido emitido por una entidad de certificación.
 
 
-**Paso 1: Crear la clave privada y el certificado**
----
+**Paso 1: Crear un certificado autofirmado con SAN 
 
-Como estamos trabajando bajo docker, accedemos al servidor:
+1. Crea un archivo de configuración de OpenSSL (por ejemplo san.conf):
 
-~~~
-docker exec -it lamp-php83 /bin/bash
-~~~
+archivo `san.conf`
+```
+[req]
+default_bits       = 2048
+distinguished_name = req_distinguished_name
+req_extensions     = req_ext
+x509_extensions    = v3_ca
+prompt             = no
 
-Comprobamos que están creados los directorios donde se guardan los certificados y creamos el certificado autofirmado:
+[req_distinguished_name]
+C  = ES
+ST = Extremadura
+L  = Plasemncia
+O  = MiEmpresa
+CN = pps.edu
 
-~~~
-mkdir /etc/apache2/ssl
-cd /etc/apache2/ssl
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout localhost.key -out localhost.crt
-~~~
+[req_ext]
+subjectAltName = @alt_names
+
+[v3_ca]
+subjectAltName = @alt_names
+basicConstraints = CA:TRUE
+
+[alt_names]
+DNS.1 = pps.edu
+DNS.2 = localhost
+```
+🔒 Importante: el CN (Common Name) debe coincidir con el dominio que usarás en el navegador, como www.pps.edu.
+
+2. Genera el certificado y clave:
+```bash
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout server.key -out server.crt -config san.conf -extensions v3_ca
+```
 
 **Explicación de los parámetros del comando:**
 
@@ -90,20 +111,20 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout localhost.key -out l
 - `-keyout server.key`: nombre del archivo que contendrá la clave privada.
 - `-out server.crt`: nombre del archivo de salida para el certificado.
 - `-days 365`: el certificado será válido por 365 días.
+- `-config`: el fichero donde tenemos la configuración san
+- `-extensions v3_ca`: la extensión y versión del archivo.
+.
+Esto genera:
 
-Durante la ejecución del comando, se te solicitará que completes datos como país, nombre de organización, y nombre común (dominio).
+- server.key → clave privada
 
-![](images/hard7.png)
+- server.crt → certificado con SAN incluido
 
-Vemos como se han creado:
-- Una **clave privada** `localhost.key` que usará el servidor web.
-- Un **certificado autofirmado** `localhost.crt`válido por un año asociado a localhost.
 
 Listar directorio `/etc/apache2/ssl`
 ![](images/hard8.png)
 
-Este certificado SSL se puede usar para habilitar **HTTPS en Apache** para un entorno local o de pruebas. No está firmado por una entidad certificadora reconocida, por lo que los navegadores lo marcarán como 
-"_no seguro_" pero es útil para el desarrollo.
+Este certificado SSL se puede usar para habilitar **HTTPS en Apache** para un entorno local o de pruebas. No está firmado por una entidad certificadora reconocida, por lo que los navegadores lo marcarán como "_no seguro_" pero es útil para el desarrollo.
 
 #### Método 2: Obtener Certificado en un servidor Linux usando Let's Encrypt y Certbot
 ---
@@ -238,8 +259,8 @@ Lo modificamos y dejamos así:
 
     # activar uso del motor de protocolo SSL
     SSLEngine on
-    SSLCertificateFile /etc/apache2/ssl/localhost.crt
-    SSLCertificateKeyFile /etc/apache2/ssl/localhost.key
+    SSLCertificateFile /etc/apache2/ssl/server.crt
+    SSLCertificateKeyFile /etc/apache2/ssl/server.key
 
     DocumentRoot /var/www/html
 </VirtualHost>
@@ -320,147 +341,112 @@ Además podemos obtener información extensa sobre el certificado y `SSL`.
 
 ![](images/TLS18.png)
 
+##  Deshabilitar versiones inseguras de TLS
+
+Para evitar vulnerabilidades, en default-ssl.conf, en la sección de ssl, configurar:
+
+archivo `/etc/apache2/sites-available/default-ssl.conf`
+```apache
+SSLProtocol TLSv1.2 TLSv1.3
+SSLCipherSuite HIGH:!aNULL:!MD5
+```
+- `SSLCipherSuite HIGH:!aNULL:!MD5` Garantiza un cifrado SSL con un alta grado de protección.
+
+**En sistemas más actualizados, se puede reemplazar:**
+
+```apache
+SSLProtocol TLSv1.2 TLSv1.3
+SSLCipherSuite HIGH:!aNULL:!MD5
+```
+por:
+```apache
+SSLOpenSSLConfCmd MinProtocol TLSv1.3
+SSLOpenSSLConfCmd CipherString DEFAULT@SECLEVEL=2
+```
+Esto usa los ajustes por defecto del sistema con un buen nivel de seguridad (SECLEVEL=2 es el mínimo recomendado para producción).
+
+**Notas importantes:**
+• Esta opción requiere Apache 2.4.43 o superior y OpenSSL 1.1.1 o superior.
+
+• Si se usa SSLOpenSSLConfCmd , es preferible no usar SSLProtocol, para evitar conflictos.
+
+• Se puede usar también `SSLOpenSSLConfCmd CipherString` para definir el conjunto de cifrados (similar a `SSLCipherSuite` pero más moderno y compatible con OpenSSL 1.1.1+ y 3.0+).
+
+## Verificación de funcionamiento de TLS
+
+Se puede verificar de manera local que la configuración TLS está funcionando correctamente, especialmente útil cuando:
+
+- No se dispone de un dominio público.
+
+- Se está trabajando en un entorno de desarrollo o laboratorio.
+
+- Se quiere confirmar que TLS 1.3 está habilitado y operativo antes de poner el servidor en producción.
+
+```bash
+openssl s_client -connect localhost:443 -tls1_3
+```
+
+Este comando:
+• Intenta establecer una conexión TLS específicamente con la versión 1.3.
+
+• Muestra un resumen de la negociación TLS, incluyendo:
+	o La versión del protocolo usada.
+
+	o El certificado presentado.
+
+	o El conjunto de cifrado negociado.
+Si se obtiene en la salida:
+```Protocol
+ : TLSv1.3
+Cipher
+ : TLS_AES_256_GCM_SHA384
+... 
+```
+entonces TLS 1.3 está activo y funcionando.
+
+![](images/TLS23.png)
+
+Con el siguiente comando:
+```bash
+nmap --script ssl-enum-ciphers -p 443 localhost
+```
+Este comando usa nmap para hacer un escaneo y enumerar todas las versiones de TLS y conjuntos de cifrado  que el servidor acepta.
+
+![](images/TLS24.png)
+
+Requiere tener el paquete nmap instalado: sudo apt install nmap
+
+Esto confirma que el servidor acepta solo TLSv1.2 y TLSv1.3 (si se configuró correctamente la exclusión de versiones antiguas).
+
+
 ## ¿Cómo eliminar la advertencia del candado? (Opcional)
 
 Si solo trabajas en local, no hay problema en ignorar la advertencia. Pero si se quiere que el navegador lo reconozca como seguro sin advertencias, dado que Firefox solo permite importar certificados de CA en la pestaña "Authorities", se debe generar un certificado raíz de CA y luego firmar el certificado con él.
 
-1. Crear un Certificado de Autoridad (CA)
 
-- Ejecutar estos comandos para generar una CA local:
-``` bash
-mkdir -p /etc/apache2/ssl
-cd /etc/apache2/ssl
-```
-
-- Generar la clave privada de la CA
-``` bash
-openssl genrsa -out myCA.key 2048
-```
-- Generar el certificado raíz de la CA (válido por 10 años)
-``` bash
-openssl req -x509 -new -nodes -key localhost.key -sha256 -days 3650 -out MyCA.pem -subj "/C=ES/ST=Extremadura/L=Plasencia/O=MyCompany/OU=MiDepartmen/CN=MiEntidadCA"
-```
-
-2. Firmar el Certificado SSL con la CA Local
-
-- Podemos enerar una clave para el servidor Apache:
-
-``` bash
-openssl genrsa -out localhost.key 2048
-```
-Aunque ya la tenemos creada anteriormente con nombre localhost.key
-
--Crear una solicitud de firma (CSR Certificate Signing Request, es un archivo que contiene información sobre una entidad que solicita un certificado SSL/TLS):
-``` bash
-openssl req -new -key localhost.key -out server.csr -subj "/C=ES/ST=Extremadura/L=Plasencia/O=MyCompany/OU=MiDepartamento/CN=localhost"
-```
-
-- Firmar el certificado con nuestra CA local:
-``` bash
-openssl x509 -req -in server.csr -CA myCA.pem -CAkey myCA.key -CAcreateserial -out server.crt -days 365 -sha256
-```
-Ahora disponemos de un certificado server.crt firmado por nuestra CA myCA.pem.
-
-3. Configurar Apache con el Nuevo Certificado
-Asegurar de que Apache use los nuevos certificados. Para ello modificar:
-sudo mousepad /etc/apache2/sites-available/default-ssl.conf
-Cambiar las rutas para que apunten a:
-SSLEngine on
-SSLCertificateFile /etc/apache2/ssl/server.crt
-SSLCertificateKeyFile /etc/apache2/ssl/server.key
-SSLCertificateChainFile /etc/apache2/ssl/myCA.pem
-Guardar y reiniciar Apache:
-sudo systemctl restart apache2
 4. Importar la CA en Firefox
-Importar myCA.pem en la pestaña "Authorities" de Firefox:
-1.
- Abrir Firefox e ir a about:preferences#privacy
-2.
- En Certificados y seleccionar Ver certificados
-3.
- En la pestaña Autoridades y seleccionar Importar...
-4.
- Seleccionar /etc/apache2/ssl/myCA.pem
-5.
- Marcar la casilla "Confiar en esta CA para identificar sitios web"
-6.
- Guardar los cambios.
-Firefox confiará en los certificados firmados por esta CA, y la advertencia desaparecerá.
 
+Como estamos con docker,
 
-### 🔒 Forzar HTTPS en Apache2 (default.conf y .htaccess)
+Importar `server.crt` en la pestaña "Authorities" de Firefox:
 
-### 1. Configuración en `default.conf` (archivo de configuración de Apache)
+	1. Abrir Firefox e ir a `Ajustes` > `Privacidad & Seguridad`
 
-Edita tu archivo de configuración del sitio (por ejemplo `/etc/apache2/sites-available/000-default.conf`).
+	2. En apartado `Seguridad`, en `Avanzado` y seleccionar `Gestionar certificados`
 
-Tienes dos opciones:
+	3. En la pestaña `Tus Certificados` y seleccionar `Importar`...
 
-**Opción a) Usar `Redirect` directo**
+	![](images/TLS20.png)
 
-~~~
-<VirtualHost *:80>
-    ServerName pps.edu
-    ServerAlias www.pps.edu
+	4. Como tenemos nuestro servidor en docker, pero tenemos un volumen montado para la configuración, podemos acceder a los certificados en la ruta `docker-compose-lamp/config/ssl/etc/apache2/ssl/server.crt`(donde docker-compose-lamp es la carpeta donde se encuentra el `docker-compose.yml` de nuestro escenario multicontenedor. Copia el Archivo `server.crt` a tu sistema de archivos para que no haya problema con los permisos y lo seleccionas ahí.
 
-    Redirect permanent / https://pps.edu/
-</VirtualHost>
+	5. Marcar la casilla "Confiar en esta CA para identificar sitios web"
 
-<VirtualHost *:443>
-    ServerName pps.edu
-    DocumentRoot /var/www/html
+	![](images/TLS20.png)
 
-    SSLEngine on
-    SSLCertificateFile /ruta/al/certificado.crt
-    SSLCertificateKeyFile /ruta/a/la/clave.key
-    SSLCertificateChainFile /ruta/a/la/cadena.crt
+	6. Guardar los cambios.
 
-    # Configuración adicional para HTTPS
-</VirtualHost>
-~~~
-
----
-
-** Opción b) Usar `RewriteEngine` para mayor flexibilidad**
-```apache
-<VirtualHost *:80>
-    ServerName pps.edu
-    ServerAlias www.pps.edu
-
-    RewriteEngine On
-    RewriteCond %{HTTPS} off
-    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-</VirtualHost>
-```
-
----
-
-### 2. Configuración en `.htaccess`
-
-Si prefieres hacerlo desde un `.htaccess` en la raíz del proyecto:
-
-~~~
-RewriteEngine On
-
-# Si no está usando HTTPS
-RewriteCond %{HTTPS} !=on
-RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-~~~
-
-> 🔥 **Recuerda:** Para que `.htaccess` funcione correctamente, en tu `default.conf` debes tener habilitado `AllowOverride All`:
-
-~~~
-<Directory /var/www/html>
-    AllowOverride All
-</Directory>
-~~~
-
-También asegúrate que el módulo `mod_rewrite` esté habilitado:
-
-```bash
-sudo a2enmod rewrite
-sudo systemctl reload apache2
-```
+Firefox confiará en los certificados firmados por esta CA, y la advertencia debería desaparecer.
 
 ---
 
@@ -468,272 +454,43 @@ sudo systemctl reload apache2
 
 Para reforzar aún más tu HTTPS, puedes agregar esta cabecera de seguridad (por ejemplo en tu VirtualHost HTTPS o en `.htaccess`):
 
+El fichero de configuración quedaría así:
+
 ```apache
-Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+<VirtualHost *:80>
+
+    ServerName www.pps.edu
+
+    ServerAdmin webmaster@localhost
+    DocumentRoot /var/www/html
+
+    ErrorLog ${APACHE_LOG_DIR}/error.log
+    CustomLog ${APACHE_LOG_DIR}/access.log combined
+
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName www.pps.edu
+
+    DocumentRoot /var/www/html
+
+    #activar uso del motor de protocolo SSL
+    SSLEngine on
+    SSLCertificateFile /etc/apache2/ssl/server.crt
+    SSLCertificateKeyFile /etc/apache2/ssl/server.key
+    # solo usar versiones modernas
+    SSLProtocol TLSv1.2 TLSv1.3
+    # Forzar solo cifrados seguros
+    SSLCipherSuite HIGH:!aNULL:!MD5
+    # Activar HSTS
+    Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+</VirtualHost>
 ```
 
 > Esto obliga a los navegadores a recordar usar siempre HTTPS, protegiendo de ataques de tipo *downgrade*.
 
 **Importante**: Asegúrate de que todo tu sitio funcione bien en HTTPS antes de aplicar HSTS.
 
-
-
-
-
-
-
------------------------------------------------------------------------
-~~~
-apt update;apt install openssl
-~~~
-
-
-~~~
-mkdir -p /etc/apache2/ssl 
-openssl req -newkey rsa:2048 -nodes -keyout /etc/apache2/ssl/server.key \
--x509 -days 365 -out /etc/apache2/ssl/server.crt \
--subj "/C=US/ST=State/L=City/O=Organization/OU=Department/CN=localhost" \
--addext "basicConstraints=CA:FALSE" \
--addext "subjectAltName=DNS:localhost"
-~~~
-![](images/TLS1.png)
-
-![](images/TLS2.png)
-
-Vemos la versión de ssl:
-~~~
-openssl version
-~~~
-![](images/TLS3.png)
-
-Y la versión de apache
-~~~
-dpkg -l |grep apache
-~~~
-![](images/TLS5.png)
-
-Guardamos el archivo de configuración existente y creamos uno nuevo.
-~~~
-mv /etc/apache2/sites-available/default-ssl.conf /etc/apache2/sites-available/default-ssl-old
-nano /etc/apache2/sites-available/default-ssl.conf
-~~~
-
-El nuevo tendrá el siguiente contenido:
-
-~~~
-VirtualHost *:443>
-        ServerAdmin admin@localhost
-        ServerName localhost
-        DocumentRoot /var/www/html
-        SSLEngine on
-        SSLCertificateFile /etc/apache2/ssl/server.crt
-        SSLCertificateKeyFile /etc/apache2/ssl/server.key
-        SSLProtocol all -SSLv3 -TLSv1 -TLSv1.1
-        SSLCipherSuite HIGH:!aNULL:!MD5
-</VirtualHost>
-~~~
-![](images/TLS4.png)
-
-Habilitar SSL y reiniciar Apache
-Habilitar el módulo SSL y el sitio seguro:
-
-
-~~~
-a2enmod ssl
-a2ensite default-ssl
-~~~
-
-Reiniciar Apache para aplicar los cambios:
-~~~
-service apache2 reload
-~~~
-Comprueba que tu servidor apache tiene el archivo index.html. Si no es así, [descárgalo de aquí.](files/index.html)
-![](images/TLS6.png)
-
-Abrimos navegador y lanzamos: `https://localhost/index.html`
-
-Nos muestra advertencia de conexión no privada
-
-![](images/TLS7.png)
-
-Pulsamos en **Avanzado** y **Acceder a localhost (sitio no seguro)**
-
-![](images/TLS8.png)
-
-### Verificar la configuración con SSL Labs (con dominio)
-
-Para asegurarse de que la configuración de TLS es segura, se puede comprobar el dominio en: SSL Labs Test
-
-~~~
-<https://www.ssllabs.com/ssltest/>
-~~~
-
-![](images/TLS8.png)
-
-### Deshabilitar versiones inseguras de TLS
-
-Para evitar vulnerabilidades, en default-ssl.conf configurar:
-
-SSLProtocol TLSv1.2 TLSv1.3
-
-~~~
-nano /etc/apache2/sites-available/default-ssl.conf
-~~~
-
-
-~~~
-SSLProtocol TLSv1.2 TLSv1.3
-~~~
-
-![](images/TLS10.png)
-
- y reiniciamos el servicio apache2
-
-~~~
-service apache2 reload
-~~~
-
-### * Forzar HTTPS con HSTS
-
-Añadir dentro del bloque <VirtualHost *:443>:
-
-~~~
-Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-~~~
-
-Habilitar los encabezados HTTP y reiniciar Apache con:
-
-~~~
-a2enmod headers
-service apache2 restart
-~~~
-
-![](images/TLS11.png)
-
- Se nos cerrará el contenedor docker, o sea que volvemos a iniciarlo.
-
-~~~
-docker-compose start
-~~~
-
-* Verificar la conexión HTTPS
-Para comprobar si HTTPS funciona correctamente, acceder a:
-https://localhost
-Si se observa el candado en la barra de direcciones, TLS está activo.
-
-
-### ¿Cómo eliminar la advertencia del candado? (Opcional)
-
-Si solo trabajas en local, no hay problema en ignorar la advertencia. Pero si se quiere que el navegador lo reconozca como seguro sin advertencias, dado que Firefox solo permite importar certificados de CA en la pestaña "Authorities", se debe generar un certificado raíz de CA y luego firmar el certificado con él.
-
-1. **Crear un Certificado de Autoridad (CA)**
-
-Ejecutar estos comandos para generar una CA local:
-
-~~~
-mkdir -p /etc/apache2/ssl
-cd /etc/apache2/ssl
-
-# Generar la clave privada de la CA
-openssl genrsa -out myCA.key 2048
-
-# Generar el certificado raíz de la CA (válido por 10 años)
-openssl req -x509 -new -nodes -key myCA.key -sha256 -days 3650 -out myCA.pem \ -subj "/C=ES/ST=Extremadura/L=Plasencia/O=CiberseguridadJoseMI/OU=Soy Yo solo /CN=localhost"
-~~~
-
-![](images/TLS12.png)
-
-2. **Firmar el Certificado SSL con la CA Local**
-
-Generar una clave para el servidor Apache:
-
-~~~
-cd /etc/apache2/ssl
-openssl genrsa -out MiServidor.key 2048
-~~~
-
-Crear una solicitud de firma (CSR Certificate Signing Request, es un archivo que contiene información sobre una entidad que solicita un certificado SSL/TLS):
-~~~
-openssl req -new -key MiServidor.key -out MiServidor.csr \ -subj "/C=ES/ST=Extremadura/L=Plasencia/O=CiberseguridadJoseMI/OU=Soy Yo solo /CN=localhost"
-~~~
-
-Firmar el certificado con nuestra CA local:
-
-~~~
-openssl x509 -req -in MiServidor.csr -CA myCA.pem -CAkey myCA.key -CAcreateserial -out MiServidor.crt -days 365 -sha256
-~~
-
-Ahora disponemos de un certificado server.crt firmado por nuestra CA myCA.pem.
-
-~~~
-~~~
-
-
-## ANEXO II
-
-Se puede verificar de manera local que la configuración TLS está funcionando correctamente, especialmente útil
-cuando:
-•
-•
-•
-No se dispone de un dominio público.
-Se está trabajando en un entorno de desarrollo o laboratorio.
-Se quiere confirmar que TLS 1.3 está habilitado y operativo antes de poner el servidor en producción.
-openssl s_client -connect localhost:443 -tls1_3
-Este comando:
-•
- Intenta establecer una conexión TLS específicamente con la versión 1.3.
-•
- Muestra un resumen de la negociación TLS, incluyendo:
-o La versión del protocolo usada.
-o El certificado presentado.
-o El conjunto de cifrado negociado.
-Si se obtiene en la salida:
-Protocol
- : TLSv1.3
-Cipher
- : TLS_AES_256_GCM_SHA384
-... entonces TLS 1.3 está activo y funcionando.
-
-
-![](images/TLS13.png)
-![](images/TLS14.png)
-![](images/TLS10.png)
-![](images/TLS10.png)
-
-## Código vulnerable
----
-
-
-
-![](images/.png)
-![](images/.png)
-![](images/.png)
-![](images/.png)
-
-
-### **Código seguro**
----
-
-Aquí está el código securizado:
-
-🔒 Medidas de seguridad implementadas
-
-- :
-
-        - 
-
-        - 
-
-
-
-🚀 Resultado
-
-✔ 
-
-✔ 
-
-✔ 
 
 ## ENTREGA
 
