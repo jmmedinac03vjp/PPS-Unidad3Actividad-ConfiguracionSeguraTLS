@@ -59,14 +59,12 @@ Para utilizar protocolos SSL tenemos que tener un certificado que indique quiene
 
 #### Método 1: Obtener certificado con **OpenSSL**
 
-1. Generamos un certificado SSL autofirmado
-
 Para entornos de prueba o desarrollo, se puede utilizar un **certificado autofirmado**, es decir, un certificado que no ha sido emitido por una entidad de certificación.
 
 
-**Paso 1: Crear un certificado autofirmado con SAN 
+**Crear un certificado autofirmado con SAN**
 
-1. Crea un archivo de configuración de OpenSSL (por ejemplo san.conf):
+- Crea un archivo de configuración de OpenSSL (por ejemplo san.conf):
 
 archivo `san.conf`
 ```
@@ -95,9 +93,9 @@ basicConstraints = CA:TRUE
 DNS.1 = pps.edu
 DNS.2 = localhost
 ```
-🔒 Importante: el CN (Common Name) debe coincidir con el dominio que usarás en el navegador, como www.pps.edu.
+🔒 Importante: el CN (Common Name) debe coincidir con el dominio que usarás en el navegador, como `pps.edu`.
 
-2. Genera el certificado y clave:
+- Genera el certificado y clave:
 ```bash
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout server.key -out server.crt -config san.conf -extensions v3_ca
 ```
@@ -387,34 +385,42 @@ openssl s_client -connect localhost:443 -tls1_3
 ```
 
 Este comando:
+
 • Intenta establecer una conexión TLS específicamente con la versión 1.3.
 
 • Muestra un resumen de la negociación TLS, incluyendo:
-	o La versión del protocolo usada.
+   
+	- La versión del protocolo usada.
 
-	o El certificado presentado.
+	- El certificado presentado.
 
-	o El conjunto de cifrado negociado.
+	- El conjunto de cifrado negociado.
+
 Si se obtiene en la salida:
 ```Protocol
  : TLSv1.3
 Cipher
  : TLS_AES_256_GCM_SHA384
-... 
+....
 ```
+
 entonces TLS 1.3 está activo y funcionando.
 
 ![](images/TLS23.png)
 
-Con el siguiente comando:
+Con el siguiente comando basado en nmap, hacemos un escaneo y enumeramos todas las versiones de TLS y conjuntos de cifrado  que el servidor acepta.
+
 ```bash
 nmap --script ssl-enum-ciphers -p 443 localhost
 ```
-Este comando usa nmap para hacer un escaneo y enumerar todas las versiones de TLS y conjuntos de cifrado  que el servidor acepta.
 
 ![](images/TLS24.png)
 
-Requiere tener el paquete nmap instalado: sudo apt install nmap
+Requiere tener el paquete nmap instalado: 
+
+``` bash
+sudo apt install nmap
+```
 
 Esto confirma que el servidor acepta solo TLSv1.2 y TLSv1.3 (si se configuró correctamente la exclusión de versiones antiguas).
 
@@ -430,21 +436,21 @@ Como estamos con docker,
 
 Importar `server.crt` en la pestaña "Authorities" de Firefox:
 
-	1. Abrir Firefox e ir a `Ajustes` > `Privacidad & Seguridad`
+1. Abrir Firefox e ir a `Ajustes` > `Privacidad & Seguridad`
 
-	2. En apartado `Seguridad`, en `Avanzado` y seleccionar `Gestionar certificados`
+2. En apartado `Seguridad`, en `Avanzado` y seleccionar `Gestionar certificados`
 
-	3. En la pestaña `Tus Certificados` y seleccionar `Importar`...
+3. En la pestaña `Tus Certificados` y seleccionar `Importar`...
 
-	![](images/TLS20.png)
+![](images/TLS20.png)
 
-	4. Como tenemos nuestro servidor en docker, pero tenemos un volumen montado para la configuración, podemos acceder a los certificados en la ruta `docker-compose-lamp/config/ssl/etc/apache2/ssl/server.crt`(donde docker-compose-lamp es la carpeta donde se encuentra el `docker-compose.yml` de nuestro escenario multicontenedor. Copia el Archivo `server.crt` a tu sistema de archivos para que no haya problema con los permisos y lo seleccionas ahí.
+4. Como tenemos nuestro servidor en docker, pero tenemos un volumen montado para la configuración, podemos acceder a los certificados en la ruta `docker-compose-lamp/config/ssl/etc/apache2/ssl/server.crt`(donde docker-compose-lamp es la carpeta donde se encuentra el `docker-compose.yml` de nuestro escenario multicontenedor. Copia el Archivo `server.crt` a tu sistema de archivos para que no haya problema con los permisos y lo seleccionas ahí.
 
-	5. Marcar la casilla "Confiar en esta CA para identificar sitios web"
+5. Marcar la casilla "Confiar en esta CA para identificar sitios web"
 
-	![](images/TLS20.png)
+![](images/TLS20.png)
 
-	6. Guardar los cambios.
+6. Guardar los cambios.
 
 Firefox confiará en los certificados firmados por esta CA, y la advertencia debería desaparecer.
 
