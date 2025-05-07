@@ -44,7 +44,7 @@ Para acceder a nuestro servidor apache:
 docker exec -it lamp-php83 /bin/bash
 ~~~
 
-## Habilitar HTTPS con SSL/TLS en Servidor Apache
+## 1. Habilitar HTTPS con SSL/TLS en Servidor Apache
 ---
 
 Para proteger nuestro servidor es crucial habilitar HTTPS en el servidor local. Veamos cómo podemos habilitarlo en Apache con dos métodos diferentes.
@@ -474,7 +474,9 @@ Esto asegura que solo TLS 1.2 y 1.3 estén habilitados.
 SSLProtocol TLSv1.2 TLSv1.3
 SSLCipherSuite HIGH:!aNULL:!MD5
 ```
+
 por:
+
 ```apache
 SSLOpenSSLConfCmd MinProtocol TLSv1.3
 SSLOpenSSLConfCmd CipherString DEFAULT@SECLEVEL=2
@@ -503,8 +505,11 @@ Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains
 ```
 
 Esto indica que:
+
 - Se usará HTTPS por al menos 1 año (`max-age=31536000`)
+
 - Incluye subdominios
+
 - Se puede incluir en la lista de precarga de navegadores
 
 Habilita el módulo `headers` si no está activo:
@@ -662,13 +667,10 @@ Firefox confiará en los certificados firmados por esta CA, y la advertencia deb
 
 > __Realiza las operaciones indicadas__
 
-> __Crea un repositorio  con nombre PPS-Unidad3Actividad6-Tu-Nombre donde documentes la realización de ellos.__
+> __Crea un repositorio  con nombre PPS-Unidad3Actividad17-Tu-Nombre donde documentes la realización de ellos.__
 
 > No te olvides de documentarlo convenientemente con explicaciones, capturas de pantalla, etc.
 
 > __Sube a la plataforma, tanto el repositorio comprimido como la dirección https a tu repositorio de Github.__
 
-# Guía Didáctica: Funcionamiento y Configuración de TLS
-
----
 
